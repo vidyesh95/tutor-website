@@ -30,6 +30,6 @@ jobs:
           FILE="d1-$(date -u +%Y-%m-%d).sql"
           echo "FILE=$FILE" >> "$GITHUB_ENV"
           npx --yes wrangler@4 d1 export tutor-db --remote --output "$FILE" \
-            --table subjects --table chapters --table lessons --table lesson_files --table d1_migrations
+            --table tracks --table subjects --table chapters --table lessons --table lesson_files --table d1_migrations
       - name: Upload to R2
         run: npx --yes wrangler@4 r2 object put "tutor-pdfs/backups/$FILE" --file "$FILE" --content-type application/sql --remote
