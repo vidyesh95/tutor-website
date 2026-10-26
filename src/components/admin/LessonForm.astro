@@ -218,7 +218,7 @@ const errorCount = Object.keys(errors).length;
                     <Icon name="arrow-down" size={16} />
                   </button>
                   <label class="btn btn-quiet btn-sm remove-toggle cursor-pointer">
-                    <input type="checkbox" name="removeFile" value={file.id} checked={removed.has(file.id)} class="size-4 accent-[var(--danger)]" />
+                    <input type="checkbox" name="removeFile" value={file.id} checked={removed.has(file.id)} class="size-4 accent-danger" />
                     Remove
                   </label>
                 </div>
@@ -249,7 +249,7 @@ const errorCount = Object.keys(errors).length;
     </div>
   </fieldset>
 
-  <div class="form-actions sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-bg px-4 py-3 md:-mx-0 md:rounded-xl md:border md:px-4">
+  <div class="form-actions sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-bg px-4 py-3 md:mx-0 md:rounded-xl md:border md:px-4">
     <div class="upload-progress hidden w-full" data-progress>
       <div class="flex justify-between text-sm"><span data-progress-label>Uploading…</span><span class="tabular-nums" data-progress-pct>0%</span></div>
       <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2"><div class="h-full origin-left scale-x-0 rounded-full bg-ink transition-transform duration-150" data-progress-bar></div></div>
