@@ -28,12 +28,12 @@ const err = (name: string) => (fieldErrors as Record<string, string[] | undefine
     <form method="POST" action={actions.saveTutorProfile} enctype="multipart/form-data" class="profile-form grid gap-5">
       <div class="field">
         <label for="name" class="label">Name</label>
-        <input id="name" name="name" value={profile?.name} maxlength="80" class="input" placeholder="e.g. Asha Kulkarni" aria-invalid={err('name') ? 'true' : undefined} />
+        <input id="name" name="name" value={profile?.name} maxlength="80" class="input" placeholder="e.g. Rahul Patil" aria-invalid={err('name') ? 'true' : undefined} />
         {err('name') && <p class="error-text">{err('name')}</p>}
       </div>
       <div class="field">
         <label for="headline" class="label">Headline <span class="font-normal text-ink-3">(optional)</span></label>
-        <input id="headline" name="headline" value={profile?.headline} maxlength="120" class="input" placeholder="e.g. Maths and Computer Science, 12 years of teaching" />
+        <input id="headline" name="headline" value={profile?.headline} maxlength="120" class="input" placeholder="e.g. Masters Computer Science and Network Engineer, part-time home tutor" />
         {err('headline') && <p class="error-text">{err('headline')}</p>}
       </div>
       <div class="field">
