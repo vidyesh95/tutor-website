@@ -1,4 +1,4 @@
-# Lesson Library
+# Patil Classes
 
 A fast, mobile-first lesson library for a tutor. Students browse ordered courses, search, watch YouTube lectures, and download PDF notes without an account. The tutor manages everything from a password-protected `/admin`.
 

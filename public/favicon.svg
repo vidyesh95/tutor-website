@@ -1,1 +1,144 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#2b2924"/><rect x="6" y="15" width="20" height="7" rx="2" fill="#f2c94c" transform="rotate(-6 16 18.5)"/><path d="M9 11h14" stroke="#f3f1ea" stroke-width="2.5" stroke-linecap="round"/></svg>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="720"
+  height="699"
+  viewBox="0 0 720 699"
+>
+  <!-- Background -->
+  <rect width="720" height="699" rx="500" ry="500" fill="#ffffff"/>
+  <!-- <rect width="720" height="699" fill="#ffffff"/> -->
+
+  <!-- Logo mark -->
+  <g transform="translate(110 170)">
+
+    <!-- Flying / running teacher silhouette -->
+    <g fill="#061c3c">
+
+      <!-- Flowing back robe -->
+      <path d="
+        M110 165
+        C150 125, 205 105, 265 104
+        C225 122, 194 150, 174 185
+        C155 217, 132 247, 91 270
+        C121 271, 155 267, 186 251
+        C176 274, 158 297, 129 315
+        C173 311, 215 293, 245 260
+        C253 278, 247 301, 231 323
+        C265 304, 287 279, 301 246
+        L285 198
+        C253 181, 221 167, 188 158
+        C162 151, 136 152, 110 165
+        Z
+      "/>
+
+      <!-- Upper body / arm -->
+      <path d="
+        M242 124
+        C263 130, 282 145, 300 160
+        C323 179, 350 187, 375 178
+        C392 172, 408 159, 421 142
+        L436 155
+        C418 184, 392 203, 361 208
+        C326 214, 294 204, 267 184
+        L224 151
+        Z
+      "/>
+
+      <!-- Head -->
+      <ellipse cx="283" cy="90" rx="27" ry="31"/>
+
+      <!-- Scholar cap -->
+      <path d="
+        M257 67
+        C268 50, 286 42, 309 39
+        L329 36
+        C321 47, 316 55, 317 64
+        C306 62, 296 63, 286 68
+        C274 74, 266 76, 257 67
+        Z
+      "/>
+
+      <!-- Hat ribbon -->
+      <path d="
+        M263 63
+        C248 69, 234 69, 222 62
+        C224 72, 234 77, 247 75
+        C254 74, 260 70, 263 63
+        Z
+      "/>
+
+      <!-- Raised arm -->
+      <path d="
+        M414 142
+        C424 130, 433 119, 441 110
+        L454 120
+        C446 132, 437 145, 428 158
+        Z
+      "/>
+
+      <!-- Chalk / pointer -->
+      <path d="
+        M440 109
+        C448 100, 457 96, 463 102
+        L482 124
+        C488 132, 483 141, 474 143
+        L458 126
+        L448 134
+        Z
+      "/>
+
+    </g>
+
+    <!-- Red speed ribbons -->
+    <g
+      fill="none"
+      stroke="#ef0000"
+      stroke-linecap="round"
+    >
+      <path
+        d="
+          M190 255
+          C245 202, 285 182, 341 184
+          C391 187, 429 198, 462 190
+          C487 184, 500 166, 506 135
+        "
+        stroke-width="8"
+      />
+
+      <path
+        d="
+          M201 275
+          C252 224, 294 204, 350 205
+          C400 207, 440 214, 472 204
+          C499 195, 514 175, 519 145
+        "
+        stroke-width="8"
+      />
+
+      <path
+        d="
+          M217 294
+          C266 246, 307 226, 360 226
+          C411 227, 450 232, 483 219
+          C510 208, 526 185, 529 157
+        "
+        stroke-width="7"
+      />
+    </g>
+  </g>
+
+  <!-- PATIL CLASSES -->
+  <text
+    x="360"
+    y="560"
+    text-anchor="middle"
+    fill="#061c3c"
+    font-family="Impact, 'Arial Black', sans-serif"
+    font-size="73"
+    font-weight="900"
+    font-style="italic"
+    letter-spacing="2"
+  >
+    PATIL CLASSES
+  </text>
+</svg>

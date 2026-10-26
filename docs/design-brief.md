@@ -120,7 +120,7 @@ D1 Time Travel covers point-in-time restore (built-in). Plus weekly GitHub Actio
 interaction-design.md, spatial-design.md, responsive-design.md, color-and-contrast.md, typography.md, ux-writing.md, motion-design.md, optimize.md.
 
 ## 12. Build notes (decisions made during craft)
-- Site name lives in `src/i18n/en.json` (`site.name`, currently "Lesson Library"); OG images regenerate with `node scripts/og-images.mjs`.
+- Site name lives in `src/i18n/en.json` (`site.name`, currently "Patil Classes"); OG images regenerate with `node scripts/og-images.mjs`.
 - Search: FTS5 with porter stemming. Terms of 6+ characters also match a 2-character-shorter prefix, so "matrix" finds "matrices". Malformed queries return no results, never a 500.
 - Continue logic: the next not-done lesson at or after the last one opened, wrapping to the start; when the course is all done, the last opened lesson. Only lesson visits (not outline browsing) make a course "most recent".
 - Done marks: an empty outline circle on every lesson row, filled amber with a check when done. Completed chapters get the same check in their header.
