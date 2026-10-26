@@ -1,0 +1,73 @@
+---
+import Base from '../../layouts/Base.astro';
+import SearchField from '../../components/SearchField.astro';
+import SearchResults from '../../components/SearchResults.astro';
+import { t } from '../../i18n';
+import { getLibraryIndex } from '../../lib/queries';
+import { runSearch } from '../../lib/search-params';
+import { TRACKS } from '../../lib/tracks';
+
+const result = await runSearch(Astro.url);
+const tracks = result.q ? [] : [...(await getLibraryIndex()).entries()].filter(([, s]) => s.length);
+---
+
+<Base title={result.q ? t('search.resultsFor', { q: result.q }) : t('search.title')} headerSearch={false} noindex={!!result.q}>
+  <div class="wrap max-w-3xl pt-6 md:pt-10">
+    <SearchField value={result.q} track={result.track} autofocus={!result.q} id="search-q" />
+    <div class="mt-8">
+      <SearchResults {...result} />
+      {
+        !result.q && (
+          <>
+            <h1 class="text-xl font-bold">{t('search.emptyTitle')}</h1>
+            <p class="mt-1 text-ink-2">{t('search.emptyBody')}</p>
+            <ul class="mt-4 flex flex-wrap gap-2">
+              {tracks.map(([id]) => (
+                <li>
+                  <a href={`/${id}`} class="chip">
+                    {TRACKS[id].label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </>
+        )
+      }
+    </div>
+  </div>
+</Base>
+
+<script>
+  // Progressive enhancement: live results as you type. Without JS the form submits normally.
+  const form = document.querySelector<HTMLFormElement>('[data-search-form]');
+  const input = form?.querySelector<HTMLInputElement>('input[name="q"]');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let controller: AbortController | undefined;
+
+  async function update() {
+    if (!form || !input) return;
+    const params = new URLSearchParams(new FormData(form) as unknown as Record<string, string>);
+    if (!input.value.trim()) return;
+    controller?.abort();
+    controller = new AbortController();
+    const current = document.getElementById('search-results');
+    current?.setAttribute('aria-busy', 'true');
+    try {
+      const res = await fetch(`/search/results?${params}`, { signal: controller.signal });
+      if (!res.ok) return;
+      const html = await res.text();
+      const container = current?.parentElement;
+      if (!container) return;
+      // Replace everything (results plus the empty-state block) with the fresh partial.
+      container.innerHTML = html;
+      history.replaceState(null, '', `/search?${params}`);
+    } catch {
+      current?.setAttribute('aria-busy', 'false');
+    }
+  }
+
+  input?.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(update, 250);
+  });
+</script>

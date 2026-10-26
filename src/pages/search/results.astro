@@ -1,0 +1,12 @@
+---
+// HTML partial for live search.
+import SearchResults from '../../components/SearchResults.astro';
+import { runSearch } from '../../lib/search-params';
+
+export const partial = true;
+
+const result = await runSearch(Astro.url);
+Astro.response.headers.set('X-Robots-Tag', 'noindex');
+---
+
+<SearchResults {...result} />

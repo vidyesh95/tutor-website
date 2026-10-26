@@ -1,0 +1,50 @@
+---
+import { actions } from 'astro:actions';
+import type { LessonFormValues } from '../../../actions/lessons';
+import Admin from '../../../layouts/Admin.astro';
+import LessonForm from '../../../components/admin/LessonForm.astro';
+import ReauthPanel from '../../../components/admin/ReauthPanel.astro';
+import Icon from '../../../components/Icon.astro';
+import { t } from '../../../i18n';
+import { getChapterOptions } from '../../../lib/admin-queries';
+
+const result = Astro.getActionResult(actions.saveLesson);
+if (result?.data?.ok) return Astro.redirect(`/admin/lessons/${result.data.id}?saved=${result.data.status}`);
+const failed = result?.data && !result.data.ok ? result.data : null;
+const sessionExpired = failed?.reason === 'session';
+if (!Astro.locals.isAdmin && !sessionExpired) return Astro.redirect('/admin/login?next=/admin/lessons/new');
+
+const options = sessionExpired ? [] : await getChapterOptions();
+const presetChapter = Astro.url.searchParams.get('chapter') ?? '';
+const values: LessonFormValues = failed?.values ?? {
+  id: '',
+  intent: '',
+  chapterId: presetChapter,
+  newChapterSubjectId: '',
+  newChapterName: '',
+  title: '',
+  slug: '',
+  description: '',
+  youtube: '',
+  removeFiles: [],
+  fileOrder: [],
+  kinds: {},
+};
+const generalError = failed?.reason === 'server' ? failed.message : result?.error?.message;
+---
+
+<Admin title={t('admin.newLesson')} current="lessons">
+  <a href="/admin" class="inline-flex items-center gap-1 text-sm text-ink-2 no-underline hover:text-ink">
+    <Icon name="arrow-left" size={16} />
+    {t('admin.lessons')}
+  </a>
+  <h1 class="mt-2 text-2xl font-bold tracking-tight">{t('admin.newLesson')}</h1>
+  {generalError && <p class="notice notice-error mt-6 max-w-3xl" role="alert">{generalError}</p>}
+  {
+    sessionExpired ? (
+      <ReauthPanel values={values} error={failed.errors.reauthPassword} hadNewFiles={failed.hadNewFiles} />
+    ) : (
+      <LessonForm values={values} errors={failed?.errors ?? {}} options={options} files={[]} hadNewFiles={failed?.hadNewFiles} />
+    )
+  }
+</Admin>

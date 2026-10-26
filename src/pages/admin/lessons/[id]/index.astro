@@ -1,0 +1,134 @@
+---
+import { actions } from 'astro:actions';
+import { eq } from 'drizzle-orm';
+import type { LessonFormValues } from '../../../../actions/lessons';
+import Admin from '../../../../layouts/Admin.astro';
+import LessonForm from '../../../../components/admin/LessonForm.astro';
+import ReauthPanel from '../../../../components/admin/ReauthPanel.astro';
+import Icon from '../../../../components/Icon.astro';
+import { subjects } from '../../../../db/schema';
+import { t } from '../../../../i18n';
+import { getChapterOptions } from '../../../../lib/admin-queries';
+import { getDb } from '../../../../lib/db';
+import { getLessonDetail } from '../../../../lib/queries';
+
+const id = Number(Astro.params.id);
+
+const deleted = Astro.getActionResult(actions.deleteLesson);
+if (deleted?.data) return Astro.redirect(`/admin?deleted=${encodeURIComponent(deleted.data.title)}`);
+
+const result = Astro.getActionResult(actions.saveLesson);
+if (result?.data?.ok) return Astro.redirect(`/admin/lessons/${result.data.id}?saved=${result.data.status}`);
+const failed = result?.data && !result.data.ok ? result.data : null;
+const sessionExpired = failed?.reason === 'session';
+if (!Astro.locals.isAdmin && !sessionExpired) return Astro.redirect(`/admin/login?next=/admin/lessons/${id}`);
+
+const recheck = Astro.getActionResult(actions.recheckVideo);
+
+const found = sessionExpired || !id ? null : await getLessonDetail({ id });
+if (!sessionExpired && !found) return Astro.rewrite('/404');
+
+const lesson = found?.detail;
+const [subject] = found ? await getDb().select().from(subjects).where(eq(subjects.id, found.subjectId)) : [];
+const options = sessionExpired ? [] : await getChapterOptions();
+const publicPath =
+  lesson?.status === 'published' && subject && !subject.archivedAt && !found?.chapterArchived ? `/${subject.track}/${subject.slug}/${lesson.slug}` : null;
+
+const values: LessonFormValues = failed?.values ?? {
+  id: String(id),
+  intent: '',
+  chapterId: String(lesson?.chapter.id ?? ''),
+  newChapterSubjectId: '',
+  newChapterName: '',
+  title: lesson?.title ?? '',
+  slug: lesson?.slug ?? '',
+  description: lesson?.description ?? '',
+  youtube: lesson?.youtubeId ? `https://youtu.be/${lesson.youtubeId}` : '',
+  removeFiles: [],
+  fileOrder: lesson?.files.map((f) => String(f.id)) ?? [],
+  kinds: {},
+};
+
+const saved = Astro.url.searchParams.get('saved');
+const generalError = failed?.reason === 'server' ? failed.message : (result?.error ?? recheck?.error ?? deleted?.error)?.message;
+const fileCount = lesson?.files.length ?? 0;
+---
+
+<Admin title={lesson?.title ?? 'Edit lesson'} current="lessons">
+  <a href="/admin" class="inline-flex items-center gap-1 text-sm text-ink-2 no-underline hover:text-ink">
+    <Icon name="arrow-left" size={16} />
+    {t('admin.lessons')}
+  </a>
+  <div class="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+    <h1 class="text-2xl font-bold tracking-tight">{lesson?.title ?? values.title}</h1>
+    {lesson && <span class="text-sm font-semibold text-ink-3">{lesson.status === 'published' ? t('admin.publishedStatus') : t('admin.draft')}</span>}
+  </div>
+
+  {
+    saved && !failed && (
+      <p class="notice notice-success mt-6 max-w-3xl" role="status">
+        <Icon name="check" class="mt-0.5 shrink-0" />
+        <span>
+          {saved === 'published' ? t('admin.published') : 'Draft saved. Students can’t see it yet.'}{' '}
+          <a href={publicPath ?? `/admin/lessons/${id}/preview`} target="_blank" class="font-semibold text-ink underline underline-offset-2">
+            {publicPath ? t('admin.viewIt') : 'Preview it'}
+          </a>
+        </span>
+      </p>
+    )
+  }
+  {
+    recheck?.data && (
+      <p class:list={['notice mt-6 max-w-3xl', recheck.data.status === 'ok' ? 'notice-success' : 'notice-warn']} role="status">
+        {recheck.data.status === 'ok'
+          ? 'The video plays again. Students see the player.'
+          : recheck.data.status === 'unavailable'
+            ? 'YouTube still says this video can’t be embedded.'
+            : 'Couldn’t reach YouTube just now. Try again in a minute.'}
+      </p>
+    )
+  }
+  {generalError && <p class="notice notice-error mt-6 max-w-3xl" role="alert">{generalError}</p>}
+
+  {
+    sessionExpired ? (
+      <ReauthPanel values={values} error={failed.errors.reauthPassword} hadNewFiles={failed.hadNewFiles} />
+    ) : (
+      lesson && (
+        <>
+          <LessonForm
+            values={values}
+            errors={failed?.errors ?? {}}
+            options={options}
+            files={lesson.files}
+            hadNewFiles={failed?.hadNewFiles}
+            lesson={{ id, status: lesson.status, slugLocked: !!lesson.publishedAt, videoStatus: lesson.videoStatus, publicPath }}
+          />
+
+          <details class="danger-zone mt-12 max-w-3xl border-t border-line pt-6">
+            <summary class="inline-flex cursor-pointer items-center gap-2 font-semibold text-danger">
+              <Icon name="trash" size={18} />
+              Delete this lesson
+            </summary>
+            <form method="POST" action={actions.deleteLesson} class="mt-4 rounded-xl border border-danger bg-danger-wash p-4">
+              <input type="hidden" name="id" value={id} />
+              <p class="font-semibold">
+                Delete “{lesson.title}”{fileCount ? ` and its ${fileCount === 1 ? 'PDF' : `${fileCount} PDFs`}` : ''}?
+              </p>
+              <p class="mt-1 text-sm text-ink-2">
+                This can’t be undone. {lesson.status === 'published' && 'Links students have saved will stop working. Unpublish instead if you might bring it back.'}
+              </p>
+              <button type="submit" class="btn btn-danger mt-4">Delete lesson</button>
+            </form>
+          </details>
+        </>
+      )
+    )
+  }
+</Admin>
+
+<style>
+  .danger-zone summary::-webkit-details-marker {
+    display: none;
+  }
+</style>

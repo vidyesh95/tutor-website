@@ -1,0 +1,59 @@
+---
+import Base from '../../../layouts/Base.astro';
+import LessonView from '../../../components/LessonView.astro';
+import NotFound from '../../../components/NotFound.astro';
+import { t, tn } from '../../../i18n';
+import { getCourse, getLessonDetail } from '../../../lib/queries';
+import { isTrackId } from '../../../lib/tracks';
+import { thumbnailUrl } from '../../../lib/youtube';
+
+const { track, subject: subjectSlug = '', lesson: lessonSlug = '' } = Astro.params;
+if (!isTrackId(track)) return Astro.rewrite('/404');
+
+const course = await getCourse(track, subjectSlug);
+// A course with no public lessons is not public; the subject 404 handles that with context.
+if (!course) return Astro.rewrite(`/${track}/${subjectSlug}`);
+
+const found = await getLessonDetail({ subjectId: course.subject.id, slug: lessonSlug });
+const visible = found && found.detail.status === 'published' && !found.chapterArchived;
+if (!visible) Astro.response.status = 404;
+else Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
+
+const lesson = visible ? found.detail : null;
+const description = lesson?.description.trim().slice(0, 155) || `${lesson?.title} · ${course.subject.name}`;
+const ogImage = lesson?.youtubeId && lesson.videoStatus !== 'unavailable' ? thumbnailUrl(lesson.youtubeId, 'hq') : `/og/${track}.png`;
+---
+
+{
+  lesson ? (
+    <Base title={`${lesson.title} · ${course.subject.name}`} description={description} ogImage={ogImage} preconnectYouTube={!!lesson.youtubeId}>
+      <LessonView track={track} subject={course.subject} lesson={lesson} course={course} />
+    </Base>
+  ) : (
+    <Base title={t('notFound.lessonTitle')} noindex>
+      <NotFound title={t('notFound.lessonTitle')} body={t('notFound.lessonBody', { subject: course.subject.name })}>
+        <div class="mt-10 max-w-3xl">
+          {course.chapters.map((chapter) => (
+            <section class="border-t border-line py-4">
+              <h2 class="font-bold">
+                <span class="eyebrow mr-2">{t('course.chapter', { n: chapter.number })}</span>
+                {chapter.name}
+              </h2>
+              <ol class="mt-2">
+                {chapter.lessons.map((l) => (
+                  <li>
+                    <a href={`/${track}/${course.subject.slug}/${l.slug}`} class="flex gap-3 rounded py-1.5 text-ink no-underline hover:underline hover:underline-offset-4">
+                      <span class="w-6 text-right text-sm text-ink-3 tabular-nums">{l.number}</span>
+                      {l.title}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ))}
+          <p class="mt-2 text-sm text-ink-3">{tn('home.lessonsOne', 'home.lessons', course.lessonCount)}</p>
+        </div>
+      </NotFound>
+    </Base>
+  )
+}

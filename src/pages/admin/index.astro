@@ -1,0 +1,264 @@
+---
+import Admin from '../../layouts/Admin.astro';
+import Icon from '../../components/Icon.astro';
+import { t } from '../../i18n';
+import { getStructure, listLessons } from '../../lib/admin-queries';
+import { isTrackId, TRACKS, TRACK_IDS } from '../../lib/tracks';
+
+const sp = Astro.url.searchParams;
+const trackParam = sp.get('track') ?? undefined;
+const filters = {
+  track: isTrackId(trackParam) ? trackParam : undefined,
+  subjectId: Number(sp.get('subject')) || undefined,
+  status: sp.get('status') === 'draft' || sp.get('status') === 'published' ? (sp.get('status') as 'draft' | 'published') : undefined,
+  q: sp.get('q')?.trim() || undefined,
+};
+const filtered = Object.values(filters).some(Boolean);
+
+const [rows, structure] = await Promise.all([listLessons(filters), getStructure()]);
+const hasSubjects = structure.some((t) => t.subjects.length);
+const deleted = sp.get('deleted');
+
+const formatDate = (sqlTime: string) =>
+  new Date(`${sqlTime.replace(' ', 'T')}Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+---
+
+<Admin title={t('admin.lessons')} current="lessons">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <h1 class="text-2xl font-bold tracking-tight">{t('admin.lessons')}</h1>
+    <a href="/admin/lessons/new" class="btn btn-primary">
+      <Icon name="plus" size={18} />
+      {t('admin.newLesson')}
+    </a>
+  </div>
+
+  {deleted !== null && <p class="notice notice-success mt-6" role="status">{t('admin.deleted')} {deleted && `“${deleted}” is gone.`}</p>}
+
+  {
+    !hasSubjects ? (
+      <section class="mt-10 max-w-xl border-t border-line pt-8">
+        <h2 class="text-xl font-bold">{t('admin.emptyTitle')}</h2>
+        <p class="mt-2 text-ink-2">{t('admin.emptyBody')}</p>
+        <a href="/admin/structure" class="btn mt-6">
+          {t('admin.emptyStructureCta')}
+        </a>
+      </section>
+    ) : (
+      <>
+        <form method="get" class="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-[minmax(0,1.5fr)_repeat(3,minmax(0,1fr))_auto]">
+          <div class="field col-span-2 lg:col-span-1">
+            <label for="f-q" class="label">Title</label>
+            <input id="f-q" name="q" type="search" value={filters.q} class="input" placeholder="Search titles" />
+          </div>
+          <div class="field">
+            <label for="f-track" class="label">Track</label>
+            <select id="f-track" name="track" class="input">
+              <option value="">All tracks</option>
+              {TRACK_IDS.map((id) => (
+                <option value={id} selected={filters.track === id}>
+                  {TRACKS[id].label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-subject" class="label">Subject</label>
+            <select id="f-subject" name="subject" class="input">
+              <option value="">All subjects</option>
+              {structure.map((group) =>
+                group.subjects.length ? (
+                  <optgroup label={TRACKS[group.track].label}>
+                    {group.subjects.map((s) => (
+                      <option value={s.id} selected={filters.subjectId === s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : null,
+              )}
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-status" class="label">Status</label>
+            <select id="f-status" name="status" class="input">
+              <option value="">Any status</option>
+              <option value="published" selected={filters.status === 'published'}>
+                {t('admin.publishedStatus')}
+              </option>
+              <option value="draft" selected={filters.status === 'draft'}>
+                {t('admin.draft')}
+              </option>
+            </select>
+          </div>
+          <div class="flex items-end gap-2">
+            <button class="btn flex-1 lg:flex-none">Filter</button>
+            {filtered && (
+              <a href="/admin" class="btn btn-quiet">
+                Clear
+              </a>
+            )}
+          </div>
+        </form>
+
+        {rows.length === 0 ? (
+          <div class="mt-8 border-t border-line pt-8">
+            {filtered ? (
+              <p class="text-ink-2">{t('admin.noMatches')}</p>
+            ) : (
+              <>
+                <h2 class="text-xl font-bold">{t('admin.emptyTitle')}</h2>
+                <p class="mt-2 max-w-xl text-ink-2">Your subjects and chapters are ready. Add a lesson with a YouTube link, PDF notes, or both.</p>
+              </>
+            )}
+          </div>
+        ) : (
+          <div class="mt-8">
+            <table class="admin-table w-full text-left text-sm">
+              <thead class="text-ink-3">
+                <tr>
+                  <th scope="col">Lesson</th>
+                  <th scope="col">Course</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Media</th>
+                  <th scope="col" class="text-right">Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr>
+                    <td data-cell="lesson">
+                      <a href={`/admin/lessons/${row.id}`} class="text-base font-semibold text-ink no-underline hover:underline hover:underline-offset-4">
+                        {row.title}
+                      </a>
+                    </td>
+                    <td data-cell="course" class="text-ink-2">
+                      {TRACKS[row.track].label} · {row.subjectName} · {row.chapterName}
+                      {(row.subjectArchived || row.chapterArchived) && <span class="ml-1 text-ink-3">(archived)</span>}
+                    </td>
+                    <td data-cell="status">
+                      <span class:list={['status-pill', row.status]}>{row.status === 'published' ? t('admin.publishedStatus') : t('admin.draft')}</span>
+                    </td>
+                    <td data-cell="media" class="text-ink-2">
+                      <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {row.youtubeId &&
+                          (row.videoStatus === 'unavailable' ? (
+                            <span class="flex items-center gap-1 font-semibold text-danger">
+                              <Icon name="alert" size={14} />
+                              {t('admin.videoUnavailable')}
+                            </span>
+                          ) : (
+                            <span class="flex items-center gap-1">
+                              <Icon name="video" size={14} />
+                              Video
+                            </span>
+                          ))}
+                        {row.fileCount > 0 && (
+                          <span class="flex items-center gap-1">
+                            <Icon name="file" size={14} />
+                            {row.fileCount === 1 ? '1 PDF' : `${row.fileCount} PDFs`}
+                          </span>
+                        )}
+                        {!row.youtubeId && row.fileCount === 0 && <span class="text-ink-3">Nothing attached</span>}
+                      </span>
+                    </td>
+                    <td data-cell="updated" class="text-right whitespace-nowrap text-ink-3 tabular-nums">
+                      {formatDate(row.updatedAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {rows.length === 200 && <p class="mt-4 text-sm text-ink-3">Showing the 200 most recently updated. Use the filters to narrow down.</p>}
+          </div>
+        )}
+      </>
+    )
+  }
+</Admin>
+
+<style>
+  .admin-table th {
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .admin-table td {
+    padding: 0.875rem 0.75rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .admin-table th:first-child,
+  .admin-table td:first-child {
+    padding-left: 0;
+  }
+  .admin-table th:last-child,
+  .admin-table td:last-child {
+    padding-right: 0;
+  }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .status-pill::before {
+    content: '';
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    border: 1.5px solid var(--ink-3);
+  }
+  .status-pill.published::before {
+    background: var(--ink);
+    border-color: var(--ink);
+  }
+  .status-pill.draft {
+    color: var(--ink-3);
+  }
+  @media (max-width: 47.99rem) {
+    .admin-table thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+    .admin-table,
+    .admin-table tbody,
+    .admin-table tr,
+    .admin-table td {
+      display: block;
+    }
+    .admin-table tr {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      grid-template-areas: 'lesson lesson' 'course course' 'media media' 'status updated';
+      gap: 0.375rem 1rem;
+      padding: 0.875rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .admin-table td {
+      padding: 0;
+      border: 0;
+    }
+    .admin-table td[data-cell='lesson'] {
+      grid-area: lesson;
+    }
+    .admin-table td[data-cell='course'] {
+      grid-area: course;
+    }
+    .admin-table td[data-cell='media'] {
+      grid-area: media;
+    }
+    .admin-table td[data-cell='status'] {
+      grid-area: status;
+    }
+    .admin-table td[data-cell='updated'] {
+      grid-area: updated;
+    }
+    .admin-table td[data-cell='updated'] {
+      text-align: right;
+    }
+  }
+</style>

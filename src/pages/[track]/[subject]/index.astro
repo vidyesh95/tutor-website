@@ -1,0 +1,197 @@
+---
+import Base from '../../../layouts/Base.astro';
+import NotFound from '../../../components/NotFound.astro';
+import SubjectIndex from '../../../components/SubjectIndex.astro';
+import Breadcrumb from '../../../components/Breadcrumb.astro';
+import CourseMemory from '../../../components/CourseMemory.astro';
+import Icon from '../../../components/Icon.astro';
+import { t, tn } from '../../../i18n';
+import { getCourse, getLibraryIndex } from '../../../lib/queries';
+import { isTrackId, TRACKS } from '../../../lib/tracks';
+
+const { track, subject: subjectSlug = '' } = Astro.params;
+if (!isTrackId(track)) return Astro.rewrite('/404');
+
+const course = await getCourse(track, subjectSlug);
+const siblings = course ? [] : ((await getLibraryIndex()).get(track) ?? []);
+if (!course) Astro.response.status = 404;
+else Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
+
+const trackLabel = TRACKS[track].label;
+const base = course ? `/${track}/${course.subject.slug}` : '';
+const firstLessonId = course?.chapters[0]?.lessons[0]?.id;
+---
+
+{
+  !course ? (
+    <Base title={t('notFound.title')} noindex>
+      <NotFound body={t('notFound.subjectBody', { track: trackLabel })}>
+        {siblings.length > 0 && (
+          <div class="mt-10 max-w-3xl">
+            <h2 class="mb-3 text-lg font-bold">{trackLabel}</h2>
+            <SubjectIndex subjects={siblings} />
+          </div>
+        )}
+      </NotFound>
+    </Base>
+  ) : (
+    <Base
+      title={`${course.subject.name} · ${trackLabel}`}
+      description={`${trackLabel} ${course.subject.name}: ${course.lessonCount} lessons with video and notes, in order.`}
+      ogImage={`/og/${track}.png`}
+    >
+      <div class="wrap pt-6 md:pt-10">
+        <Breadcrumb items={[{ label: trackLabel, href: `/${track}` }]} />
+        <div class="mt-3 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+          <div>
+            <h1 class="text-2xl font-bold tracking-tight md:text-3xl">{course.subject.name}</h1>
+            <p class="mt-1 text-ink-2">
+              {tn('home.chaptersOne', 'home.chapters', course.chapters.length)} ·{' '}
+              {tn('home.lessonsOne', 'home.lessons', course.lessonCount)}
+            </p>
+          </div>
+          <div id="course-progress" class="w-full max-w-xs" hidden>
+            <p class="text-sm font-semibold" data-progress-text />
+            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
+              <div class="progress-fill h-full origin-left rounded-full bg-accent" />
+            </div>
+          </div>
+        </div>
+
+        <ol class="mt-8 max-w-3xl border-t border-line" id="chapters">
+          {course.chapters.map((chapter, ci) => (
+            <li class="border-b border-line" data-chapter={chapter.id}>
+              <details open={ci === 0} class="chapter group/ch">
+                <summary class="flex min-h-16 cursor-pointer list-none items-center gap-4 py-4 select-none">
+                  <span class="min-w-0 flex-1">
+                    <span class="eyebrow block">{t('course.chapter', { n: chapter.number })}</span>
+                    <span class="mt-0.5 block text-lg leading-snug font-bold">{chapter.name}</span>
+                  </span>
+                  <span class="chapter-done done-mark" aria-hidden="true">
+                    <Icon name="check" />
+                  </span>
+                  <span class="shrink-0 text-sm text-ink-3 tabular-nums" data-chapter-count data-total={chapter.lessons.length}>
+                    {tn('home.lessonsOne', 'home.lessons', chapter.lessons.length)}
+                  </span>
+                  <Icon
+                    name="chevron-down"
+                    size={18}
+                    class="shrink-0 text-ink-3 transition-transform duration-200 group-open/ch:rotate-180"
+                  />
+                </summary>
+                <ol class="pb-4">
+                  {chapter.lessons.map((lesson) => (
+                    <li data-lesson-id={lesson.id} data-next={lesson.id === firstLessonId ? '' : undefined}>
+                      <a
+                        href={`${base}/${lesson.slug}`}
+                        class="lesson-row flex min-h-12 items-center gap-3 rounded-lg py-2.5 text-ink no-underline transition-colors duration-150 hover:bg-surface md:-mx-3 md:px-3"
+                      >
+                        <span class="w-6 shrink-0 text-right text-sm text-ink-3 tabular-nums">{lesson.number}</span>
+                        <span class="min-w-0 flex-1">
+                          <span class="swipe rounded-sm leading-snug">{lesson.title}</span>
+                          <span class="next-label ml-2 align-[0.1em] text-xs font-semibold text-ink-2">{t('course.upNext')}</span>
+                        </span>
+                        <span class="flex shrink-0 items-center gap-1.5 text-ink-3">
+                          {lesson.hasVideo && <Icon name="video" size={16} label={t('course.hasVideo')} />}
+                          {lesson.kinds.length > 0 && <Icon name="file" size={16} label={t('course.hasNotes')} />}
+                        </span>
+                        <span class="done-mark" aria-hidden="true" data-label={t('course.done')}>
+                          <Icon name="check" />
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <CourseMemory course={course} />
+      <script
+        is:inline
+        define:vars={{ subjectId: course.subject.id, total: course.lessonCount, progressCopy: t('course.progress'), chapterCopy: t('course.progress') }}
+      >
+        (function () {
+          var done = TL.done();
+          var course = TL.read('tl:courses', {})[subjectId];
+          var rows = document.querySelectorAll('#chapters [data-lesson-id]');
+          var doneCount = 0;
+          rows.forEach(function (row) {
+            var id = Number(row.dataset.lessonId);
+            var mark = row.querySelector('.done-mark');
+            if (done.has(id)) {
+              row.setAttribute('data-done', '');
+              // Announce "Done" only where it applies; the empty circle stays decorative.
+              mark.removeAttribute('aria-hidden');
+              mark.setAttribute('role', 'img');
+              mark.setAttribute('aria-label', mark.dataset.label);
+              doneCount++;
+            }
+          });
+          document.querySelectorAll('[data-chapter]').forEach(function (ch) {
+            var n = ch.querySelectorAll('[data-done]').length;
+            var count = ch.querySelector('[data-chapter-count]');
+            if (n) count.textContent = chapterCopy.replace('{done}', n).replace('{total}', count.dataset.total);
+            if (n && n === Number(count.dataset.total)) ch.setAttribute('data-complete', '');
+          });
+          if (doneCount) {
+            var box = document.getElementById('course-progress');
+            box.hidden = false;
+            box.querySelector('[data-progress-text]').textContent = progressCopy.replace('{done}', doneCount).replace('{total}', total);
+            box.querySelector('.progress-fill').style.transform = 'scaleX(' + doneCount / total + ')';
+          }
+          // Highlight the resume lesson and open only its chapter.
+          if (course && course.lessons) {
+            var r = TL.resume(course, done);
+            var target = r && !r.complete && document.querySelector('[data-lesson-id="' + r.lesson[0] + '"]');
+            if (target) {
+              document.querySelectorAll('[data-next]').forEach(function (el) { el.removeAttribute('data-next'); });
+              target.setAttribute('data-next', '');
+              document.querySelectorAll('#chapters details').forEach(function (d) {
+                d.open = d.contains(target);
+              });
+            } else if (r && r.complete) {
+              document.querySelectorAll('[data-next]').forEach(function (el) { el.removeAttribute('data-next'); });
+            }
+          } else if (doneCount === total) {
+            document.querySelectorAll('[data-next]').forEach(function (el) { el.removeAttribute('data-next'); });
+          }
+        })();
+      </script>
+    </Base>
+  )
+}
+
+<style>
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  .next-label {
+    display: none;
+  }
+  [data-next] .next-label {
+    display: inline;
+  }
+  [data-next] .lesson-row {
+    font-weight: 600;
+  }
+  .chapter-done {
+    display: none;
+  }
+  [data-complete] > details > summary .chapter-done {
+    display: inline-grid;
+    background: var(--accent);
+    border-color: var(--accent-stroke);
+    color: var(--accent-ink);
+  }
+  [data-complete] > details > summary .chapter-done :global(svg) {
+    transform: none;
+    opacity: 1;
+  }
+  .progress-fill {
+    transform: scaleX(0);
+    transition: transform 400ms var(--ease-out-quart);
+  }
+</style>

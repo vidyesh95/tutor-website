@@ -1,0 +1,289 @@
+---
+// Shared by the public lesson page and the admin draft preview, so a preview is exactly what students get.
+import Breadcrumb from './Breadcrumb.astro';
+import CourseMemory from './CourseMemory.astro';
+import FileList from './FileList.astro';
+import Icon from './Icon.astro';
+import VideoFacade from './VideoFacade.astro';
+import { t } from '../i18n';
+import { fileUrl, formatBytes } from '../lib/files';
+import type { Course, LessonDetail } from '../lib/queries';
+import { TRACKS, type TrackId } from '../lib/tracks';
+
+interface Props {
+  track: TrackId;
+  subject: { id: number; name: string; slug: string };
+  lesson: LessonDetail;
+  course: Course | null;
+  preview?: boolean;
+}
+const { track, subject, lesson, course, preview = false } = Astro.props;
+
+const base = `/${track}/${subject.slug}`;
+const trackLabel = TRACKS[track].label;
+const flat = course?.chapters.flatMap((c) => c.lessons.map((l) => ({ ...l, chapter: c }))) ?? [];
+const index = flat.findIndex((l) => l.id === lesson.id);
+const here = index >= 0 ? flat[index] : null;
+const prev = index > 0 ? flat[index - 1] : null;
+const next = index >= 0 && index < flat.length - 1 ? flat[index + 1] : null;
+const chapterLessons = here?.chapter.lessons ?? [];
+
+const playable = !!lesson.youtubeId && lesson.videoStatus !== 'unavailable';
+const unavailable = !!lesson.youtubeId && lesson.videoStatus === 'unavailable';
+// Fixed order: video, primary notes, supplementary. Without a playable video the notes take the hero slot.
+const heroFile = playable ? null : (lesson.files.find((f) => f.kind === 'notes') ?? lesson.files[0] ?? null);
+const listFiles = heroFile ? lesson.files.filter((f) => f !== heroFile) : lesson.files;
+const paragraphs = lesson.description.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+---
+
+{
+  preview && (
+    <div class="border-b border-warn bg-warn-wash no-print">
+      <div class="wrap flex min-h-12 flex-wrap items-center justify-between gap-2 py-2 text-sm">
+        <p class="font-semibold">{lesson.status === 'draft' ? t('lesson.draftBanner') : t('admin.publishedStatus')}</p>
+        <a href={`/admin/lessons/${lesson.id}`} class="btn btn-sm">
+          <Icon name="pencil" size={16} />
+          {t('lesson.editLesson')}
+        </a>
+      </div>
+    </div>
+  )
+}
+
+<article class="wrap pt-5 md:pt-8">
+  <div class="grid gap-x-12 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div class="min-w-0">
+      <Breadcrumb items={[{ label: trackLabel, href: `/${track}` }, { label: subject.name, href: base }]} />
+      <header class="mt-3">
+        {here && <p class="eyebrow">{t('lesson.chapterLesson', { chapter: here.chapter.number, lesson: here.number })}</p>}
+        {!here && <p class="eyebrow">{lesson.chapter.name}</p>}
+        <h1 class="mt-1.5 text-2xl font-bold tracking-tight md:text-3xl">{lesson.title}</h1>
+      </header>
+
+      <div class="mt-5 -mx-4 md:mx-0">
+        {playable && <VideoFacade youtubeId={lesson.youtubeId!} title={lesson.title} />}
+      </div>
+
+      {
+        unavailable && (
+          <div class="notice notice-warn mt-5" role="note">
+            <Icon name="alert" class="mt-0.5 shrink-0" />
+            <p>
+              {t('lesson.videoUnavailable')}{' '}
+              <a href={`https://www.youtube.com/watch?v=${lesson.youtubeId}`} class="font-semibold text-ink underline underline-offset-4" rel="noopener">
+                {t('lesson.watchOnYouTube')}
+              </a>
+            </p>
+          </div>
+        )
+      }
+
+      {
+        heroFile && (
+          <section class="notes-hero mt-5 rounded-xl border border-line bg-surface p-5 md:p-6" aria-labelledby="notes-hero-heading">
+            <div class="flex items-start gap-4">
+              <span class="grid size-12 shrink-0 place-items-center rounded-lg bg-bg text-ink-2 ring-1 ring-line">
+                <Icon name="file" size={24} />
+              </span>
+              <div class="min-w-0">
+                <h2 id="notes-hero-heading" class="text-lg font-bold">
+                  {t('lesson.notesHero')}
+                </h2>
+                <p class="print-url text-sm text-ink-3" data-url={fileUrl(heroFile.r2Key)}>
+                  {t(`fileKinds.${heroFile.kind}`)} · PDF · {formatBytes(heroFile.sizeBytes)}
+                </p>
+              </div>
+            </div>
+            <div class="mt-5 flex flex-wrap gap-2 no-print">
+              <a href={`${fileUrl(heroFile.r2Key)}?download=1`} download class="btn btn-primary">
+                <Icon name="download" size={18} />
+                {t('lesson.download')}
+              </a>
+              <a href={fileUrl(heroFile.r2Key)} target="_blank" rel="noopener" class="btn">
+                {t('lesson.open')}
+                <Icon name="external" size={16} />
+              </a>
+            </div>
+          </section>
+        )
+      }
+
+      <div class="mt-6 lg:hidden">
+        <FileList files={listFiles} />
+      </div>
+
+      <div class="mt-6 flex flex-wrap items-center gap-3 no-print">
+        <button type="button" class="btn mark-done" data-lesson={lesson.id} aria-pressed="false" data-on={t('lesson.markedDone')} data-off={t('lesson.markDone')}>
+          <span class="done-mark"><Icon name="check" /></span>
+          <span class="mark-label">{t('lesson.markDone')}</span>
+        </button>
+        <script is:inline define:vars={{ id: lesson.id }}>
+          (function () {
+            var b = document.currentScript.previousElementSibling;
+            if (TL.done().has(id)) {
+              b.setAttribute('aria-pressed', 'true');
+              b.setAttribute('data-done', '');
+              b.querySelector('.mark-label').textContent = b.dataset.on;
+            }
+          })();
+        </script>
+      </div>
+
+      {
+        paragraphs.length > 0 && (
+          <section class="mt-10 max-w-[68ch]" aria-labelledby="about-heading">
+            <h2 id="about-heading" class="eyebrow">
+              {t('lesson.about')}
+            </h2>
+            <div class="mt-3 space-y-4 text-ink-2">
+              {paragraphs.map((p) => (
+                <p class="whitespace-pre-line">{p}</p>
+              ))}
+            </div>
+          </section>
+        )
+      }
+
+      {
+        here && (
+          <nav aria-label="Lesson navigation" class="mt-12 hidden gap-4 border-t border-line pt-6 sm:grid sm:grid-cols-2 no-print">
+            {prev ? (
+              <a href={`${base}/${prev.slug}`} class="group rounded-lg py-2 text-ink no-underline">
+                <span class="flex items-center gap-1.5 text-sm text-ink-3">
+                  <Icon name="arrow-left" size={16} />
+                  {t('lesson.previous')}
+                </span>
+                <span class="mt-1 block font-semibold group-hover:underline group-hover:underline-offset-4">{prev.title}</span>
+              </a>
+            ) : (
+              <span />
+            )}
+            {next ? (
+              <a href={`${base}/${next.slug}`} class="group rounded-lg py-2 text-right text-ink no-underline">
+                <span class="flex items-center justify-end gap-1.5 text-sm text-ink-3">
+                  {t('lesson.next')}
+                  <Icon name="arrow-right" size={16} />
+                </span>
+                <span class="mt-1 block font-semibold group-hover:underline group-hover:underline-offset-4">{next.title}</span>
+              </a>
+            ) : (
+              <a href={base} class="rounded-lg py-2 text-right text-ink-2 no-underline hover:text-ink">
+                <span class="block text-sm text-ink-3">{t('lesson.lastLesson')}</span>
+                <span class="mt-1 block font-semibold">{t('lesson.backToCourse', { subject: subject.name })}</span>
+              </a>
+            )}
+          </nav>
+        )
+      }
+    </div>
+
+    <aside class="mt-10 lg:mt-14">
+      <div class="hidden lg:block">
+        <FileList files={listFiles} />
+      </div>
+      {
+        chapterLessons.length > 1 && (
+          <nav aria-labelledby="chapter-nav-heading" class="mt-10 first:mt-0 lg:mt-10 no-print">
+            <h2 id="chapter-nav-heading" class="eyebrow">
+              {t('lesson.inThisChapter')}
+            </h2>
+            <p class="mt-1 font-semibold">{here!.chapter.name}</p>
+            <ol class="mt-3 space-y-0.5">
+              {chapterLessons.map((l) => (
+                <li data-lesson-id={l.id}>
+                  <a
+                    href={`${base}/${l.slug}`}
+                    aria-current={l.id === lesson.id ? 'page' : undefined}
+                    class="outline-row flex min-h-10 items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-ink-2 no-underline hover:bg-surface hover:text-ink"
+                  >
+                    <span class="w-5 shrink-0 text-right text-ink-3 tabular-nums">{l.number}</span>
+                    <span class="min-w-0 flex-1 leading-snug">{l.title}</span>
+                    <span class="done-mark scale-90" aria-hidden="true">
+                      <Icon name="check" />
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ol>
+            <script is:inline>
+              (function () {
+                var done = TL.done();
+                document.currentScript.parentElement.querySelectorAll('[data-lesson-id]').forEach(function (li) {
+                  if (done.has(Number(li.dataset.lessonId))) li.setAttribute('data-done', '');
+                });
+              })();
+            </script>
+          </nav>
+        )
+      }
+    </aside>
+  </div>
+</article>
+
+{
+  here && (
+    <div class="sticky-bar sticky bottom-0 z-10 mt-10 border-t border-line bg-bg sm:hidden no-print">
+      <div class="wrap flex items-center gap-2 py-2">
+        {prev ? (
+          <a href={`${base}/${prev.slug}`} class="btn btn-sm" aria-label={`${t('lesson.previous')}: ${prev.title}`}>
+            <Icon name="arrow-left" size={18} />
+          </a>
+        ) : (
+          <a href={base} class="btn btn-sm" aria-label={t('lesson.backToCourse', { subject: subject.name })}>
+            <Icon name="arrow-left" size={18} />
+          </a>
+        )}
+        {next ? (
+          <a href={`${base}/${next.slug}`} class="btn btn-sm min-w-0 flex-1 justify-between">
+            <span class="truncate">{t('lesson.nextLesson', { title: next.title })}</span>
+            <Icon name="arrow-right" size={18} class="shrink-0" />
+          </a>
+        ) : (
+          <a href={base} class="btn btn-sm min-w-0 flex-1">
+            <span class="truncate">{t('lesson.backToCourse', { subject: subject.name })}</span>
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+{!preview && course && <CourseMemory course={course} openedLessonId={lesson.id} />}
+
+<script>
+  type TLApi = { read: (k: string, d: unknown) => unknown; write: (k: string, v: unknown) => void };
+  const TL = (window as unknown as { TL: TLApi }).TL;
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>('.mark-done')) {
+    const id = Number(button.dataset.lesson);
+    button.addEventListener('click', () => {
+      const done = new Set(TL.read('tl:done', []) as number[]);
+      const nowDone = !done.has(id);
+      if (nowDone) done.add(id);
+      else done.delete(id);
+      TL.write('tl:done', [...done]);
+      button.toggleAttribute('data-done', nowDone);
+      button.setAttribute('aria-pressed', String(nowDone));
+      button.querySelector('.mark-label')!.textContent = nowDone ? button.dataset.on! : button.dataset.off!;
+      document
+        .querySelectorAll(`aside [data-lesson-id="${id}"]`)
+        .forEach((el) => el.toggleAttribute('data-done', nowDone));
+    });
+  }
+</script>
+
+<style>
+  .sticky-bar {
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: var(--shadow-sticky);
+  }
+  .outline-row[aria-current='page'] {
+    background: var(--surface-2);
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .mark-done .done-mark {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+</style>

@@ -1,0 +1,160 @@
+---
+import { t, tn } from '../i18n';
+import { SEARCH_PAGE_SIZE, type SearchHit } from '../lib/queries';
+import { TRACKS, TRACK_IDS, type TrackId } from '../lib/tracks';
+import Icon from './Icon.astro';
+
+interface Props {
+  q: string;
+  track?: TrackId;
+  page: number;
+  hits: SearchHit[];
+  total: number;
+}
+const { q, track, page, hits, total } = Astro.props;
+const pages = Math.max(1, Math.ceil(total / SEARCH_PAGE_SIZE));
+const href = (params: { track?: string; page?: number }) => {
+  const sp = new URLSearchParams({ q });
+  const tr = 'track' in params ? params.track : track;
+  if (tr) sp.set('track', tr);
+  if (params.page && params.page > 1) sp.set('page', String(params.page));
+  return `/search?${sp}`;
+};
+---
+
+<div id="search-results" aria-live="polite" aria-busy="false">
+  {
+    q && (
+      <>
+        <div class="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 class="text-xl font-bold">{t('search.resultsFor', { q })}</h1>
+          <p class="text-sm text-ink-3 tabular-nums">{tn('search.countOne', 'search.count', total)}</p>
+        </div>
+        <nav aria-label="Filter by track" class="-mx-4 mt-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+          <ul class="flex gap-2 pb-1">
+            <li>
+              <a href={href({ track: undefined })} class="chip" aria-current={!track ? 'true' : undefined}>
+                {t('search.allTracks')}
+              </a>
+            </li>
+            {TRACK_IDS.map((id) => (
+              <li>
+                <a href={href({ track: id })} class="chip" aria-current={track === id ? 'true' : undefined}>
+                  {TRACKS[id].label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </>
+    )
+  }
+
+  {
+    q && hits.length === 0 && (
+      <div class="mt-8 border-t border-line pt-6">
+        <h2 class="text-lg font-bold">{t('search.noResultsTitle', { q })}</h2>
+        <p class="mt-1 text-ink-2">{t('search.noResultsBody')}</p>
+        <ul class="mt-4 flex flex-wrap gap-2">
+          {TRACK_IDS.map((id) => (
+            <li>
+              <a href={`/${id}`} class="chip">
+                {TRACKS[id].label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
+  {
+    hits.length > 0 && (
+      <ol class="mt-6 divide-y divide-line border-y border-line">
+        {hits.map((hit) => (
+          <li>
+            <a
+              href={`/${hit.track}/${hit.subjectSlug}/${hit.slug}`}
+              class="block py-4 text-ink no-underline transition-colors duration-150 hover:bg-surface md:-mx-3 md:px-3"
+            >
+              <span class="block text-sm text-ink-3">
+                {TRACKS[hit.track].label} · {hit.subjectName} · {hit.chapterName}
+              </span>
+              <span class="mt-0.5 block text-lg leading-snug font-semibold" set:html={hit.titleHtml} />
+              {hit.snippetHtml && <span class="mt-1 line-clamp-2 block text-sm text-ink-2" set:html={hit.snippetHtml} />}
+              <span class="mt-2 flex items-center gap-3 text-xs text-ink-3">
+                {hit.hasVideo && (
+                  <span class="flex items-center gap-1">
+                    <Icon name="video" size={14} />
+                    {t('course.hasVideo')}
+                  </span>
+                )}
+                {hit.fileCount > 0 && (
+                  <span class="flex items-center gap-1">
+                    <Icon name="file" size={14} />
+                    {t('course.hasNotes')}
+                  </span>
+                )}
+              </span>
+            </a>
+          </li>
+        ))}
+      </ol>
+    )
+  }
+
+  {
+    pages > 1 && (
+      <nav aria-label="Pagination" class="mt-6 flex items-center justify-between gap-2 text-sm">
+        {page > 1 ? (
+          <a href={href({ page: page - 1 })} class="btn btn-sm">
+            <Icon name="arrow-left" size={16} />
+            {t('search.prev')}
+          </a>
+        ) : (
+          <span />
+        )}
+        <span class="text-ink-3 tabular-nums">{t('search.page', { page, pages })}</span>
+        {page < pages ? (
+          <a href={href({ page: page + 1 })} class="btn btn-sm">
+            {t('search.next')}
+            <Icon name="arrow-right" size={16} />
+          </a>
+        ) : (
+          <span />
+        )}
+      </nav>
+    )
+  }
+</div>
+
+<style is:global>
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.25rem;
+    padding: 0.25rem 0.875rem;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink-2);
+    white-space: nowrap;
+    text-decoration: none;
+    transition: background-color 150ms var(--ease-out-quart);
+  }
+  .chip:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .chip[aria-current] {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--bg);
+  }
+  @media (pointer: coarse) {
+    .chip {
+      min-height: 2.75rem;
+    }
+  }
+</style>

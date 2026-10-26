@@ -1,0 +1,35 @@
+# Weekly D1 export to R2 (backups/). Complements D1 Time Travel (point-in-time restore).
+#
+# Retention: keep ~12 weekly backups with an R2 lifecycle rule (one-time setup):
+#   npx wrangler r2 bucket lifecycle add tutor-pdfs expire-d1-backups backups/ --expire-days 85
+#
+# Required repository secrets: CLOUDFLARE_API_TOKEN (D1 read + R2 write), CLOUDFLARE_ACCOUNT_ID.
+#
+# lessons_fts is an FTS5 virtual table, which `d1 export` can't include, so the base tables
+# are exported explicitly. After a restore, use "Rebuild search index" in /admin/structure.
+name: D1 backup
+
+on:
+  schedule:
+    - cron: '30 20 * * 0' # Sundays 20:30 UTC (Monday 02:00 IST)
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Export D1
+        run: |
+          FILE="d1-$(date -u +%Y-%m-%d).sql"
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+          npx --yes wrangler@4 d1 export tutor-db --remote --output "$FILE" \
+            --table subjects --table chapters --table lessons --table lesson_files --table d1_migrations
+      - name: Upload to R2
+        run: npx --yes wrangler@4 r2 object put "tutor-pdfs/backups/$FILE" --file "$FILE" --content-type application/sql --remote

@@ -20,3 +20,7 @@ Consult these guides before working on related tasks:
 - [Adding or managing content](https://docs.astro.build/en/guides/content-collections/)
 - [Adding styles or using Tailwind](https://docs.astro.build/en/guides/styling/)
 - [Supporting multiple languages](https://docs.astro.build/en/guides/internationalization/)
+
+## Design Context
+
+Read `PRODUCT.md` (users, tone, principles) and `docs/design-brief.md` (confirmed design + platform decisions) before UI or schema work. Keep the brief current when decisions change.

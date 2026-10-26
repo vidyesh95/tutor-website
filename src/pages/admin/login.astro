@@ -1,0 +1,42 @@
+---
+import { actions, isInputError } from 'astro:actions';
+import Admin from '../../layouts/Admin.astro';
+import { t } from '../../i18n';
+
+const nextParam = Astro.url.searchParams.get('next') ?? '';
+// Only ever return to an admin path; never an arbitrary URL.
+const next = /^\/admin(\/|$|\?)/.test(nextParam) && !nextParam.startsWith('//') ? nextParam : '/admin';
+
+const login = Astro.getActionResult(actions.loginAdmin);
+if (login && !login.error) return Astro.redirect(next);
+if (Astro.getActionResult(actions.logoutAdmin)) return Astro.redirect('/admin/login');
+if (!login && Astro.locals.isAdmin) return Astro.redirect(next);
+
+const fieldError = isInputError(login?.error) ? login.error.fields.password?.[0] : undefined;
+const formError = login?.error && !isInputError(login.error) ? login.error.message : undefined;
+const error = fieldError ?? formError;
+---
+
+<Admin title={t('admin.signIn')} bare>
+  <div class="mx-auto mt-6 max-w-sm md:mt-16">
+    <h1 class="text-xl font-bold tracking-tight">{t('admin.loginTitle')}</h1>
+    <form method="POST" action={actions.loginAdmin} class="mt-6 grid gap-4">
+      <div class="field">
+        <label for="password" class="label">{t('admin.password')}</label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          required
+          autocomplete="current-password"
+          autofocus
+          class="input"
+          aria-invalid={error ? 'true' : undefined}
+          aria-describedby={error ? 'password-error' : undefined}
+        />
+        {error && <p id="password-error" class="error-text">{error}</p>}
+      </div>
+      <button type="submit" class="btn btn-primary w-full">{t('admin.signIn')}</button>
+    </form>
+  </div>
+</Admin>

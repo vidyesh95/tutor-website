@@ -1,0 +1,20 @@
+---
+// Friendly not-found body. Callers set the 404 status and pass whatever context they have.
+import { t } from '../i18n';
+import SearchField from './SearchField.astro';
+
+interface Props {
+  title?: string;
+  body?: string;
+}
+const { title = t('notFound.title'), body = t('notFound.body') } = Astro.props;
+---
+
+<section class="wrap pt-10 pb-6 md:pt-16">
+  <p class="eyebrow">404</p>
+  <h1 class="mt-2 max-w-2xl text-2xl font-bold tracking-tight md:text-3xl">{title}</h1>
+  <p class="mt-2 max-w-2xl text-ink-2">{body}</p>
+  <div class="mt-6 max-w-2xl"><SearchField id="nf-q" /></div>
+  <slot />
+  <p class="mt-8"><a href="/" class="font-semibold text-ink underline decoration-line-strong underline-offset-4">{t('notFound.home')}</a></p>
+</section>

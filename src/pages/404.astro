@@ -1,0 +1,9 @@
+---
+import Base from '../layouts/Base.astro';
+import NotFound from '../components/NotFound.astro';
+import { t } from '../i18n';
+---
+
+<Base title={t('notFound.title')} noindex>
+  <NotFound />
+</Base>

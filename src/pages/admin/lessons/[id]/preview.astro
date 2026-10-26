@@ -1,0 +1,18 @@
+---
+// Draft preview: the real public lesson view, rendered for the tutor only (middleware guards /admin).
+import { eq } from 'drizzle-orm';
+import Base from '../../../../layouts/Base.astro';
+import LessonView from '../../../../components/LessonView.astro';
+import { subjects } from '../../../../db/schema';
+import { getDb } from '../../../../lib/db';
+import { getCourse, getLessonDetail } from '../../../../lib/queries';
+
+const found = await getLessonDetail({ id: Number(Astro.params.id) });
+if (!found) return Astro.rewrite('/404');
+const [subject] = await getDb().select().from(subjects).where(eq(subjects.id, found.subjectId));
+const course = await getCourse(subject.track, subject.slug);
+---
+
+<Base title={`Preview: ${found.detail.title}`} noindex preconnectYouTube={!!found.detail.youtubeId}>
+  <LessonView track={subject.track} subject={subject} lesson={found.detail} course={course} preview />
+</Base>

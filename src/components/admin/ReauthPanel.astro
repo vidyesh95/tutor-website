@@ -1,0 +1,47 @@
+---
+// Shown when a lesson save arrives after the session expired. Carries every submitted
+// value as hidden fields so signing in again saves the work in one step.
+import { actions } from 'astro:actions';
+import type { LessonFormValues } from '../../actions/lessons';
+import { t } from '../../i18n';
+import Icon from '../Icon.astro';
+
+interface Props {
+  values: LessonFormValues;
+  error?: string;
+  hadNewFiles: boolean;
+}
+const { values, error, hadNewFiles } = Astro.props;
+const scalars = ['id', 'intent', 'chapterId', 'newChapterSubjectId', 'newChapterName', 'title', 'slug', 'description', 'youtube'] as const;
+---
+
+<form method="POST" action={actions.saveLesson} class="mt-6 max-w-md rounded-xl border border-line bg-surface p-5 md:p-6">
+  <div class="flex items-start gap-3">
+    <Icon name="alert" class="mt-0.5 shrink-0 text-warn" />
+    <div>
+      <h2 class="font-bold">{t('admin.sessionExpired')}</h2>
+      <p class="mt-1 text-sm text-ink-2">Your edits to “{values.title || 'this lesson'}” are held here and save as soon as you sign in.</p>
+      {hadNewFiles && <p class="mt-2 text-sm text-ink-2">PDFs you chose can’t be carried over. Add them again after saving.</p>}
+    </div>
+  </div>
+  {scalars.map((name) => <input type="hidden" name={name} value={values[name]} />)}
+  {values.removeFiles.map((id) => <input type="hidden" name="removeFile" value={id} />)}
+  {values.fileOrder.map((id) => <input type="hidden" name="fileOrder" value={id} />)}
+  {Object.entries(values.kinds).map(([id, kind]) => <input type="hidden" name={`kind_${id}`} value={kind} />)}
+  <div class="field mt-5">
+    <label for="reauthPassword" class="label">{t('admin.password')}</label>
+    <input
+      id="reauthPassword"
+      name="reauthPassword"
+      type="password"
+      required
+      autocomplete="current-password"
+      autofocus
+      class="input"
+      aria-invalid={error ? 'true' : undefined}
+      aria-describedby={error ? 'reauth-error' : undefined}
+    />
+    {error && <p id="reauth-error" class="error-text">{error}</p>}
+  </div>
+  <button type="submit" class="btn btn-primary mt-4 w-full">Sign in and save</button>
+</form>

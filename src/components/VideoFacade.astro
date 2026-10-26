@@ -1,0 +1,67 @@
+---
+// Lightweight YouTube facade: a poster and a real <button>. No YouTube JS loads until it's pressed.
+import { t } from '../i18n';
+import { thumbnailUrl } from '../lib/youtube';
+import Icon from './Icon.astro';
+
+interface Props {
+  youtubeId: string;
+  title: string;
+}
+const { youtubeId, title } = Astro.props;
+---
+
+<div class="video-frame relative aspect-video overflow-hidden bg-surface-2 md:rounded-xl" data-video={youtubeId}>
+  <button
+    type="button"
+    class="facade group absolute inset-0 grid h-full w-full cursor-pointer place-items-center"
+    aria-label={t('lesson.play', { title })}
+    data-iframe-title={t('lesson.videoTitle', { title })}
+  >
+    <img
+      src={thumbnailUrl(youtubeId, 'hq')}
+      srcset={`${thumbnailUrl(youtubeId, 'mq')} 320w, ${thumbnailUrl(youtubeId, 'hq')} 480w`}
+      sizes="(min-width: 64rem) 48rem, 100vw"
+      width="480"
+      height="270"
+      alt=""
+      fetchpriority="high"
+      decoding="async"
+      class="absolute inset-0 h-full w-full object-cover"
+    />
+    <span
+      class="play relative grid size-16 place-items-center rounded-full bg-accent text-accent-ink shadow-[0_4px_24px_oklch(0.2_0.02_85/0.35)] transition-transform duration-200 group-hover:scale-105 group-active:scale-95 md:size-20"
+    >
+      <Icon name="play" size={28} class="translate-x-0.5" />
+    </span>
+  </button>
+</div>
+
+<script>
+  for (const frame of document.querySelectorAll<HTMLElement>('[data-video]')) {
+    const button = frame.querySelector<HTMLButtonElement>('.facade');
+    button?.addEventListener(
+      'click',
+      () => {
+        const iframe = document.createElement('iframe');
+        iframe.src = `https://www.youtube-nocookie.com/embed/${frame.dataset.video}?autoplay=1&rel=0&playsinline=1`;
+        iframe.title = button.dataset.iframeTitle ?? '';
+        iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+        iframe.allowFullscreen = true;
+        iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+        iframe.className = 'absolute inset-0 h-full w-full border-0';
+        button.replaceWith(iframe);
+        iframe.focus();
+      },
+      { once: true },
+    );
+  }
+</script>
+
+<style>
+  @media print {
+    .video-frame {
+      display: none;
+    }
+  }
+</style>

@@ -1,16 +1,122 @@
 ---
+import Base from '../layouts/Base.astro';
+import SearchField from '../components/SearchField.astro';
+import SubjectIndex from '../components/SubjectIndex.astro';
+import { t } from '../i18n';
+import { getLibraryIndex } from '../lib/queries';
+import { TRACKS } from '../lib/tracks';
+
+const index = await getLibraryIndex();
+const tracks = [...index.entries()].filter(([, subjects]) => subjects.length > 0);
+
+Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
-</html>
+<Base headerSearch={false}>
+  <section class="wrap pt-8 pb-6 md:pt-16 md:pb-10">
+    <h1 class="max-w-2xl text-2xl font-bold tracking-tight md:text-3xl">{t('search.emptyTitle')}</h1>
+    <p class="mt-2 max-w-2xl text-ink-2">{t('search.emptyBody')}</p>
+    <div class="mt-6 max-w-2xl">
+      <SearchField id="home-q" />
+    </div>
+
+    <!-- Continue row: built before first paint from device memory, so nothing shifts. -->
+    <div id="continue" class="max-w-2xl"></div>
+    <script is:inline define:vars={{ copy: { label: t('home.continueLabel'), next: t('home.upNext'), review: t('home.reviewLast'), cta: t('home.continueCta') } }}>
+      (function () {
+        var courses = TL.read('tl:courses', {});
+        var latest = null;
+        for (var id in courses) if (!latest || courses[id].at > latest.at) latest = courses[id];
+        if (!latest || !latest.lessons || !latest.lessons.length) return;
+        var r = TL.resume(latest, TL.done());
+        if (!r) return;
+        var el = document.getElementById('continue');
+        el.innerHTML =
+          '<a class="continue-card" href="">' +
+          '<span class="eyebrow"></span>' +
+          '<span class="continue-title"></span>' +
+          '<span class="continue-meta"></span>' +
+          '<span class="btn btn-primary btn-sm continue-cta"></span></a>';
+        var a = el.firstChild;
+        a.href = r.lesson[2];
+        a.querySelector('.eyebrow').textContent = copy.label;
+        a.querySelector('.continue-title').textContent = r.lesson[1];
+        a.querySelector('.continue-meta').textContent =
+          latest.track + ' · ' + latest.name + ' · ' + (r.complete ? copy.review : copy.next);
+        a.querySelector('.continue-cta').textContent = copy.cta;
+      })();
+    </script>
+  </section>
+
+  <div class="wrap">
+    {
+      tracks.length === 0 ? (
+        <section class="max-w-xl border-t border-line py-12">
+          <h2 class="text-xl font-bold">{t('home.emptyTitle')}</h2>
+          <p class="mt-2 text-ink-2">{t('home.emptyBody')}</p>
+        </section>
+      ) : (
+        <div class="grid gap-12 md:gap-16">
+          {tracks.map(([track, subjects]) => (
+            <section aria-labelledby={`track-${track}`} class="grid gap-4 md:grid-cols-[14rem_minmax(0,1fr)] md:gap-10">
+              <div class="md:sticky md:top-6 md:self-start md:pt-3">
+                <h2 id={`track-${track}`} class="text-xl font-bold tracking-tight">
+                  <a href={`/${track}`} class="text-ink no-underline hover:underline hover:decoration-line-strong hover:underline-offset-4">
+                    {TRACKS[track].label}
+                  </a>
+                </h2>
+                <p class="mt-0.5 text-sm text-ink-3">{TRACKS[track].blurb}</p>
+              </div>
+              <SubjectIndex subjects={subjects} />
+            </section>
+          ))}
+        </div>
+      )
+    }
+  </div>
+</Base>
+
+<style is:global>
+  .continue-card {
+    margin-top: 1.25rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'eyebrow cta' 'title cta' 'meta cta';
+    column-gap: 1rem;
+    align-items: center;
+    padding: 1rem 1.125rem;
+    border-radius: 0.875rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    text-decoration: none;
+    transition: border-color 150ms var(--ease-out-quart);
+  }
+  .continue-card:hover {
+    border-color: var(--line-strong);
+  }
+  .continue-card .eyebrow {
+    grid-area: eyebrow;
+  }
+  .continue-title {
+    grid-area: title;
+    font-weight: 700;
+    font-size: var(--text-lg);
+    line-height: 1.3;
+    margin-top: 0.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .continue-meta {
+    grid-area: meta;
+    font-size: var(--text-sm);
+    color: var(--ink-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .continue-cta {
+    grid-area: cta;
+  }
+</style>

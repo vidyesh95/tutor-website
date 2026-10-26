@@ -1,0 +1,153 @@
+---
+import { Font } from 'astro:assets';
+import { env } from 'cloudflare:workers';
+import '../styles/global.css';
+import { t } from '../i18n';
+import Icon from '../components/Icon.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
+
+interface Props {
+  title?: string;
+  description?: string;
+  ogImage?: string;
+  canonical?: string;
+  noindex?: boolean;
+  /** Home has its own big search field, so the header one is hidden there. */
+  headerSearch?: boolean;
+  preconnectYouTube?: boolean;
+}
+
+const {
+  title,
+  description = t('site.description'),
+  ogImage = '/og/default.png',
+  canonical,
+  noindex = false,
+  headerSearch = true,
+  preconnectYouTube = false,
+} = Astro.props;
+
+const siteName = t('site.name');
+const fullTitle = title ? `${title} · ${siteName}` : siteName;
+const canonicalUrl = new URL(canonical ?? Astro.url.pathname, Astro.url.origin).href;
+const ogImageUrl = new URL(ogImage, Astro.url.origin).href;
+const beaconToken = (env as unknown as Record<string, string | undefined>).CF_BEACON_TOKEN;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+    {noindex && <meta name="robots" content="noindex" />}
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#faf9f6" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1b1a17" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={title ?? siteName} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={ogImageUrl} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    {preconnectYouTube && <link rel="preconnect" href="https://i.ytimg.com" />}
+    <Font cssVariable="--font-atkinson" preload />
+
+    <script is:inline>
+      try {
+        var saved = localStorage.getItem('tl:theme');
+        if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+      } catch (e) {}
+      // Device-only study memory. Every access is guarded: blocked storage must never break a page.
+      // tl:done = [lessonId]; tl:courses = { [subjectId]: { name, track, url, lessons: [[id, title, url]], last, at } }
+      window.TL = {
+        read: function (k, d) {
+          try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; }
+        },
+        write: function (k, v) {
+          try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {}
+        },
+        done: function () { return new Set(TL.read('tl:done', [])); },
+        // Next not-done lesson at or after the last opened one, wrapping to the start;
+        // when the whole course is done, the last opened lesson.
+        resume: function (course, done) {
+          var ls = course.lessons, n = ls.length, i = 0;
+          for (var k = 0; k < n; k++) if (ls[k][0] === course.last) i = k;
+          for (var j = 0; j < n; j++) {
+            var l = ls[(i + j) % n];
+            if (!done.has(l[0])) return { lesson: l, complete: false };
+          }
+          return n ? { lesson: ls[i], complete: true } : null;
+        }
+      };
+    </script>
+    <slot name="head" />
+  </head>
+  <body class="flex min-h-dvh flex-col">
+    <a
+      href="#main"
+      class="skip-link sr-only z-50 rounded-ui bg-accent px-4 py-2 font-semibold text-accent-ink focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+      >{t('site.skip')}</a
+    >
+
+    <header role="banner" class="border-b border-line">
+      <div class="wrap flex h-14 items-center gap-3 md:h-16">
+        <a href="/" class="mr-auto -ml-1 rounded px-1 text-base font-bold tracking-tight text-ink no-underline md:text-lg">
+          {siteName}
+        </a>
+        {
+          headerSearch && (
+            <>
+              <form action="/search" method="get" role="search" class="relative hidden w-72 md:block">
+                <label for="header-q" class="sr-only">
+                  {t('search.label')}
+                </label>
+                <Icon name="search" size={18} class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-3" />
+                <input
+                  id="header-q"
+                  name="q"
+                  type="search"
+                  autocomplete="off"
+                  enterkeyhint="search"
+                  placeholder={t('search.label')}
+                  class="input min-h-10 pl-9 text-sm"
+                />
+              </form>
+              <a href="/search" class="btn btn-quiet btn-sm md:hidden" aria-label={t('search.label')}>
+                <Icon name="search" />
+              </a>
+            </>
+          )
+        }
+        <ThemeToggle />
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1" class="flex-1 outline-none">
+      <slot />
+    </main>
+
+    <footer role="contentinfo" class="mt-16 border-t border-line">
+      <div class="wrap flex flex-wrap items-center justify-between gap-2 py-6 text-sm text-ink-3">
+        <p>{siteName}. {t('site.footer')}</p>
+      </div>
+    </footer>
+
+    {
+      beaconToken && (
+        <script
+          is:inline
+          defer
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon={JSON.stringify({ token: beaconToken })}
+        />
+      )
+    }
+  </body>
+</html>

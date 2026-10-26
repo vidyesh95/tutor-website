@@ -1,0 +1,281 @@
+---
+import { actions } from 'astro:actions';
+import Admin from '../../layouts/Admin.astro';
+import ActionForm from '../../components/admin/ActionForm.astro';
+import Icon from '../../components/Icon.astro';
+import { t } from '../../i18n';
+import { getStructure } from '../../lib/admin-queries';
+import { TRACKS } from '../../lib/tracks';
+
+const handled = [
+  actions.createSubject,
+  actions.updateSubject,
+  actions.moveSubject,
+  actions.archiveSubject,
+  actions.deleteSubject,
+  actions.createChapter,
+  actions.renameChapter,
+  actions.moveChapter,
+  actions.archiveChapter,
+  actions.deleteChapter,
+  actions.moveLesson,
+  actions.rebuildSearchIndex,
+];
+let error: string | undefined;
+for (const action of handled) {
+  const result = Astro.getActionResult(action);
+  if (!result) continue;
+  if (result.error) {
+    error = result.error.message;
+    break;
+  }
+  // Post/redirect/get so refresh never resubmits; the form's #fragment survives the redirect.
+  const message = 'message' in result.data ? result.data.message : '';
+  return Astro.redirect(`/admin/structure${message ? `?msg=${encodeURIComponent(message)}` : ''}`);
+}
+const message = Astro.url.searchParams.get('msg');
+const tree = await getStructure();
+---
+
+<Admin title={t('admin.structure')} current="structure">
+  <h1 class="text-2xl font-bold tracking-tight">{t('admin.structure')}</h1>
+  <p class="mt-1 max-w-2xl text-ink-2">
+    Tracks are fixed. Inside each, subjects hold chapters and chapters hold lessons, in the order students see them. Archiving hides something from students without deleting anything.
+  </p>
+
+  {message && <p class="notice notice-success mt-6 max-w-3xl" role="status"><Icon name="check" class="mt-0.5 shrink-0" />{message}</p>}
+  {error && <p class="notice notice-error mt-6 max-w-3xl" role="alert"><Icon name="alert" class="mt-0.5 shrink-0" />{error}</p>}
+
+  <div class="mt-10 grid gap-14">
+    {
+      tree.map(({ track, subjects }) => (
+        <section aria-labelledby={`t-${track}`} id={`track-${track}`}>
+          <div class="flex flex-wrap items-baseline gap-x-3 border-b border-line-strong pb-2">
+            <h2 id={`t-${track}`} class="text-xl font-bold">
+              {TRACKS[track].label}
+            </h2>
+            <p class="text-sm text-ink-3">{TRACKS[track].blurb}</p>
+          </div>
+
+          {subjects.length === 0 && <p class="mt-4 text-sm text-ink-3">No subjects yet.</p>}
+
+          <ol class="mt-4 grid gap-4">
+            {subjects.map((subject, si) => (
+              <li id={`subject-${subject.id}`} class:list={['subject rounded-xl border border-line', subject.archived && 'is-archived']}>
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-surface px-4 py-3 md:rounded-t-xl">
+                  <div class="mr-auto min-w-0">
+                    <h3 class="font-bold">
+                      {subject.name}
+                      {subject.archived && <span class="ml-2 text-sm font-semibold text-ink-3">Archived</span>}
+                    </h3>
+                    <p class="text-sm text-ink-3">
+                      /{track}/{subject.slug} · {subject.lessonCount === 1 ? '1 lesson' : `${subject.lessonCount} lessons`}
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-1">
+                    <ActionForm action={actions.moveSubject} fields={{ id: subject.id, direction: 'up' }} anchor={`subject-${subject.id}`}>
+                      <button class="btn btn-quiet btn-sm" disabled={si === 0} aria-label={`Move ${subject.name} up`}>
+                        <Icon name="arrow-up" size={16} />
+                      </button>
+                    </ActionForm>
+                    <ActionForm action={actions.moveSubject} fields={{ id: subject.id, direction: 'down' }} anchor={`subject-${subject.id}`}>
+                      <button class="btn btn-quiet btn-sm" disabled={si === subjects.length - 1} aria-label={`Move ${subject.name} down`}>
+                        <Icon name="arrow-down" size={16} />
+                      </button>
+                    </ActionForm>
+                    <details class="inline-edit">
+                      <summary class="btn btn-quiet btn-sm">Rename</summary>
+                      <ActionForm action={actions.updateSubject} fields={{ id: subject.id }} anchor={`subject-${subject.id}`} class="popover-form">
+                        <div class="field">
+                          <label class="label" for={`sn-${subject.id}`}>Name</label>
+                          <input id={`sn-${subject.id}`} name="name" value={subject.name} required class="input" />
+                        </div>
+                        <div class="field">
+                          <label class="label" for={`ss-${subject.id}`}>Link</label>
+                          <input id={`ss-${subject.id}`} name="slug" value={subject.slug} readonly={subject.slugLocked} class="input read-only:text-ink-3" pattern="[a-z0-9]+(-[a-z0-9]+)*" />
+                          <p class="hint">{subject.slugLocked ? 'Locked because lessons here have been published, so shared links keep working.' : t('admin.slugHelp')}</p>
+                        </div>
+                        <button class="btn btn-primary btn-sm justify-self-start">Save</button>
+                      </ActionForm>
+                    </details>
+                    <ActionForm action={actions.archiveSubject} fields={{ id: subject.id, mode: subject.archived ? 'restore' : 'archive' }} anchor={`subject-${subject.id}`}>
+                      <button class="btn btn-quiet btn-sm">
+                        <Icon name="archive" size={16} />
+                        {subject.archived ? 'Restore' : 'Archive'}
+                      </button>
+                    </ActionForm>
+                    {subject.lessonCount === 0 && (
+                      <details class="inline-edit">
+                        <summary class="btn btn-quiet btn-sm text-danger">Delete</summary>
+                        <ActionForm action={actions.deleteSubject} fields={{ id: subject.id }} class="popover-form">
+                          <p class="text-sm">
+                            Delete {subject.name}
+                            {subject.chapters.length ? ` and its ${subject.chapters.length} empty chapter${subject.chapters.length === 1 ? '' : 's'}` : ''}? This can’t be undone.
+                          </p>
+                          <button class="btn btn-danger btn-sm justify-self-start">Delete subject</button>
+                        </ActionForm>
+                      </details>
+                    )}
+                  </div>
+                </div>
+
+                <ol class="divide-y divide-line">
+                  {subject.chapters.map((chapter, ci) => (
+                    <li id={`chapter-${chapter.id}`} class:list={['px-4 py-3', chapter.archived && 'is-archived']}>
+                      <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <span class="w-6 text-right text-sm text-ink-3 tabular-nums">{ci + 1}</span>
+                        <div class="mr-auto min-w-0">
+                          <p class="font-semibold">
+                            {chapter.name}
+                            {chapter.archived && <span class="ml-2 text-sm text-ink-3">Archived</span>}
+                          </p>
+                          <p class="text-sm text-ink-3">{chapter.lessons.length === 1 ? '1 lesson' : `${chapter.lessons.length} lessons`}</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1">
+                          <a href={`/admin/lessons/new?chapter=${chapter.id}`} class="btn btn-quiet btn-sm">
+                            <Icon name="plus" size={16} />
+                            Lesson
+                          </a>
+                          <ActionForm action={actions.moveChapter} fields={{ id: chapter.id, direction: 'up' }} anchor={`chapter-${chapter.id}`}>
+                            <button class="btn btn-quiet btn-sm" disabled={ci === 0} aria-label={`Move ${chapter.name} up`}>
+                              <Icon name="arrow-up" size={16} />
+                            </button>
+                          </ActionForm>
+                          <ActionForm action={actions.moveChapter} fields={{ id: chapter.id, direction: 'down' }} anchor={`chapter-${chapter.id}`}>
+                            <button class="btn btn-quiet btn-sm" disabled={ci === subject.chapters.length - 1} aria-label={`Move ${chapter.name} down`}>
+                              <Icon name="arrow-down" size={16} />
+                            </button>
+                          </ActionForm>
+                          <details class="inline-edit">
+                            <summary class="btn btn-quiet btn-sm">Rename</summary>
+                            <ActionForm action={actions.renameChapter} fields={{ id: chapter.id }} anchor={`chapter-${chapter.id}`} class="popover-form">
+                              <div class="field">
+                                <label class="label" for={`cn-${chapter.id}`}>Chapter name</label>
+                                <input id={`cn-${chapter.id}`} name="name" value={chapter.name} required class="input" />
+                              </div>
+                              <button class="btn btn-primary btn-sm justify-self-start">Save</button>
+                            </ActionForm>
+                          </details>
+                          <ActionForm action={actions.archiveChapter} fields={{ id: chapter.id, mode: chapter.archived ? 'restore' : 'archive' }} anchor={`chapter-${chapter.id}`}>
+                            <button class="btn btn-quiet btn-sm">{chapter.archived ? 'Restore' : 'Archive'}</button>
+                          </ActionForm>
+                          {chapter.lessons.length === 0 && (
+                            <ActionForm action={actions.deleteChapter} fields={{ id: chapter.id }} anchor={`subject-${subject.id}`}>
+                              <button class="btn btn-quiet btn-sm text-danger" aria-label={`Delete empty chapter ${chapter.name}`}>
+                                Delete
+                              </button>
+                            </ActionForm>
+                          )}
+                        </div>
+                      </div>
+                      {chapter.lessons.length > 1 && (
+                        <details class="lesson-order mt-2 ml-9">
+                          <summary class="cursor-pointer text-sm font-semibold text-ink-2">Reorder lessons</summary>
+                          <ol class="mt-2 divide-y divide-line rounded-lg border border-line">
+                            {chapter.lessons.map((lesson, li) => (
+                              <li id={`lesson-${lesson.id}`} class="flex items-center gap-2 px-3 py-1.5">
+                                <span class="w-5 text-right text-sm text-ink-3 tabular-nums">{li + 1}</span>
+                                <a href={`/admin/lessons/${lesson.id}`} class="mr-auto min-w-0 truncate text-sm text-ink no-underline hover:underline">
+                                  {lesson.title}
+                                  {lesson.status === 'draft' && <span class="ml-1 text-ink-3">(draft)</span>}
+                                </a>
+                                <ActionForm action={actions.moveLesson} fields={{ id: lesson.id, direction: 'up' }} anchor={`chapter-${chapter.id}`}>
+                                  <button class="btn btn-quiet btn-sm" disabled={li === 0} aria-label={`Move ${lesson.title} up`}>
+                                    <Icon name="arrow-up" size={16} />
+                                  </button>
+                                </ActionForm>
+                                <ActionForm action={actions.moveLesson} fields={{ id: lesson.id, direction: 'down' }} anchor={`chapter-${chapter.id}`}>
+                                  <button class="btn btn-quiet btn-sm" disabled={li === chapter.lessons.length - 1} aria-label={`Move ${lesson.title} down`}>
+                                    <Icon name="arrow-down" size={16} />
+                                  </button>
+                                </ActionForm>
+                              </li>
+                            ))}
+                          </ol>
+                        </details>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+
+                <ActionForm action={actions.createChapter} fields={{ subjectId: subject.id }} anchor={`subject-${subject.id}`} class="flex flex-wrap items-end gap-2 border-t border-line px-4 py-3">
+                  <div class="field min-w-48 flex-1">
+                    <label class="label" for={`nc-${subject.id}`}>New chapter in {subject.name}</label>
+                    <input id={`nc-${subject.id}`} name="name" required class="input" placeholder="e.g. Limits and continuity" />
+                  </div>
+                  <button class="btn">
+                    <Icon name="plus" size={16} />
+                    Add chapter
+                  </button>
+                </ActionForm>
+              </li>
+            ))}
+          </ol>
+
+          <details class="mt-4" open={subjects.length === 0}>
+            <summary class="btn btn-sm">
+              <Icon name="plus" size={16} />
+              Add a subject to {TRACKS[track].label}
+            </summary>
+            <ActionForm action={actions.createSubject} fields={{ track }} anchor={`track-${track}`} class="mt-3 grid max-w-xl gap-3 rounded-xl border border-line p-4 sm:grid-cols-2">
+              <div class="field">
+                <label class="label" for={`ns-${track}`}>Subject name</label>
+                <input id={`ns-${track}`} name="name" required class="input" placeholder="e.g. Maths" />
+              </div>
+              <div class="field">
+                <label class="label" for={`nsl-${track}`}>Link <span class="font-normal text-ink-3">(optional)</span></label>
+                <input id={`nsl-${track}`} name="slug" class="input" placeholder="made-from-the-name" pattern="[a-z0-9]+(-[a-z0-9]+)*" />
+              </div>
+              <button class="btn btn-primary justify-self-start sm:col-span-2">Add subject</button>
+            </ActionForm>
+          </details>
+        </section>
+      ))
+    }
+  </div>
+
+  <section class="mt-16 max-w-3xl border-t border-line pt-6">
+    <h2 class="font-bold">Maintenance</h2>
+    <p class="mt-1 text-sm text-ink-2">Search updates itself when you save. Rebuild it only after restoring a database backup.</p>
+    <ActionForm action={actions.rebuildSearchIndex} class="mt-3">
+      <button class="btn btn-sm">
+        <Icon name="refresh" size={16} />
+        Rebuild search index
+      </button>
+    </ActionForm>
+  </section>
+</Admin>
+
+<style>
+  .is-archived > div:first-child,
+  li.is-archived > div {
+    opacity: 0.6;
+  }
+  .inline-edit {
+    position: relative;
+  }
+  .inline-edit summary::-webkit-details-marker,
+  details > summary.btn::-webkit-details-marker {
+    display: none;
+  }
+  details > summary.btn {
+    list-style: none;
+  }
+  .popover-form {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.375rem);
+    z-index: 20;
+    display: grid;
+    gap: 0.75rem;
+    width: min(22rem, calc(100vw - 2rem));
+    padding: 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--line-strong);
+    background: var(--bg);
+    box-shadow: 0 12px 32px oklch(0.2 0.02 85 / 0.14);
+  }
+  .inline-edit[open] > summary {
+    background: var(--surface-2);
+  }
+</style>

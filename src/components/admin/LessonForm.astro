@@ -1,0 +1,446 @@
+---
+import { actions } from 'astro:actions';
+import type { LessonFormValues } from '../../actions/lessons';
+import type { LessonFile } from '../../db/schema';
+import { t } from '../../i18n';
+import type { getChapterOptions } from '../../lib/admin-queries';
+import { FILE_KINDS, MAX_FILE_BYTES, MAX_SAVE_BYTES, formatBytes } from '../../lib/files';
+import { TRACKS } from '../../lib/tracks';
+import { parseYouTubeId, thumbnailUrl } from '../../lib/youtube';
+import Icon from '../Icon.astro';
+
+interface Props {
+  values: LessonFormValues;
+  errors: Record<string, string>;
+  options: Awaited<ReturnType<typeof getChapterOptions>>;
+  files: LessonFile[];
+  /** Existing lesson state (edit mode). */
+  lesson?: { id: number; status: 'draft' | 'published'; slugLocked: boolean; videoStatus: string; publicPath: string | null };
+  hadNewFiles?: boolean;
+}
+const { values, errors, options, files, lesson, hadNewFiles } = Astro.props;
+
+const removed = new Set(values.removeFiles.map(Number));
+const orderIndex = new Map(values.fileOrder.map((id, i) => [Number(id), i]));
+const orderedFiles = [...files].sort((a, b) => (orderIndex.get(a.id) ?? a.position) - (orderIndex.get(b.id) ?? b.position));
+const youtubeId = parseYouTubeId(values.youtube);
+const currentChapterId = Number(values.chapterId);
+const describedBy = (name: string, hint?: string) => [hint, errors[name] && `${name}-error`].filter(Boolean).join(' ') || undefined;
+const errorCount = Object.keys(errors).length;
+---
+
+<form
+  method="POST"
+  action={actions.saveLesson}
+  enctype="multipart/form-data"
+  class="lesson-form mt-6 grid max-w-3xl gap-10"
+  data-max-file={MAX_FILE_BYTES}
+  data-max-total={MAX_SAVE_BYTES}
+>
+  <input type="hidden" name="id" value={values.id} />
+
+  {
+    errorCount > 0 && (
+      <div class="notice notice-error" role="alert" id="form-errors" tabindex="-1">
+        <Icon name="alert" class="mt-0.5 shrink-0" />
+        <div>
+          <p class="font-semibold">{errorCount === 1 ? 'One thing needs fixing before this can be saved.' : `${errorCount} things need fixing before this can be saved.`}</p>
+          <ul class="mt-1 list-disc pl-5">
+            {Object.entries(errors).map(([field, message]) => (
+              <li>
+                <a href={`#field-${field}`} class="text-ink underline underline-offset-2">
+                  {message}
+                </a>
+              </li>
+            ))}
+          </ul>
+          {hadNewFiles && <p class="mt-2">Browsers can’t keep chosen files after a failed save, so please select your PDFs again.</p>}
+        </div>
+      </div>
+    )
+  }
+
+  <fieldset class="grid gap-5">
+    <legend class="mb-4 text-lg font-bold">Where it lives</legend>
+    <div class="field" id="field-chapterId">
+      <label for="chapterId" class="label">Chapter</label>
+      <select id="chapterId" name="chapterId" required class="input" aria-invalid={errors.chapterId ? 'true' : undefined} aria-describedby={describedBy('chapterId')}>
+        <option value="">Choose a chapter…</option>
+        {
+          options.map((subject) => {
+            const visible = subject.chapters.filter((c) => !c.archived || c.id === currentChapterId);
+            if (!visible.length || (subject.archived && !visible.some((c) => c.id === currentChapterId))) return null;
+            return (
+              <optgroup label={`${TRACKS[subject.track].label} · ${subject.name}${subject.archived ? ' (archived)' : ''}`}>
+                {visible.map((c) => (
+                  <option value={c.id} selected={c.id === currentChapterId}>
+                    {c.name}
+                    {c.archived ? ' (archived)' : ''}
+                  </option>
+                ))}
+              </optgroup>
+            );
+          })
+        }
+        <option value="new" selected={values.chapterId === 'new'}>+ New chapter…</option>
+      </select>
+      {errors.chapterId && <p id="chapterId-error" class="error-text">{errors.chapterId}</p>}
+    </div>
+
+    <div class="new-chapter grid gap-4 rounded-xl border border-line bg-surface p-4 sm:grid-cols-2">
+      <div class="field" id="field-newChapterSubjectId">
+        <label for="newChapterSubjectId" class="label">Subject for the new chapter</label>
+        <select id="newChapterSubjectId" name="newChapterSubjectId" class="input" aria-invalid={errors.newChapterSubjectId ? 'true' : undefined} aria-describedby={describedBy('newChapterSubjectId')}>
+          <option value="">Choose a subject…</option>
+          {
+            options
+              .filter((s) => !s.archived)
+              .map((s) => (
+                <option value={s.id} selected={String(s.id) === values.newChapterSubjectId}>
+                  {TRACKS[s.track].label} · {s.name}
+                </option>
+              ))
+          }
+        </select>
+        {errors.newChapterSubjectId && <p id="newChapterSubjectId-error" class="error-text">{errors.newChapterSubjectId}</p>}
+      </div>
+      <div class="field" id="field-newChapterName">
+        <label for="newChapterName" class="label">Chapter name</label>
+        <input id="newChapterName" name="newChapterName" value={values.newChapterName} class="input" placeholder="e.g. Pointers and memory" aria-invalid={errors.newChapterName ? 'true' : undefined} aria-describedby={describedBy('newChapterName')} />
+        {errors.newChapterName && <p id="newChapterName-error" class="error-text">{errors.newChapterName}</p>}
+      </div>
+      {options.length === 0 && <p class="hint sm:col-span-2">No subjects yet. <a href="/admin/structure" class="text-ink underline underline-offset-2">Create one first</a>.</p>}
+    </div>
+  </fieldset>
+
+  <fieldset class="grid gap-5">
+    <legend class="mb-4 text-lg font-bold">Lesson</legend>
+    <div class="field" id="field-title">
+      <label for="title" class="label">Title</label>
+      <input id="title" name="title" value={values.title} required minlength="3" maxlength="140" class="input" aria-invalid={errors.title ? 'true' : undefined} aria-describedby={describedBy('title')} />
+      {errors.title && <p id="title-error" class="error-text">{errors.title}</p>}
+    </div>
+    <div class="field" id="field-slug">
+      <label for="slug" class="label">Link</label>
+      <div
+        class:list={[
+          'flex items-stretch overflow-hidden rounded-ui border focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-accent-stroke',
+          errors.slug ? 'border-danger' : 'border-line-strong',
+        ]}
+      >
+        <span class="flex items-center bg-surface px-3 text-sm text-ink-3 select-none">…/</span>
+        <input
+          id="slug"
+          name="slug"
+          value={values.slug}
+          readonly={lesson?.slugLocked}
+          placeholder="made-from-the-title"
+          pattern="[a-z0-9]+(-[a-z0-9]+)*"
+          class="min-h-11 min-w-0 flex-1 bg-bg px-3 font-[inherit] text-ink outline-none read-only:text-ink-3"
+          aria-invalid={errors.slug ? 'true' : undefined}
+          aria-describedby={describedBy('slug', 'slug-hint')}
+          data-slug
+        />
+      </div>
+      <p id="slug-hint" class="hint">{lesson?.slugLocked ? t('admin.slugLocked') : t('admin.slugHelp')}</p>
+      {errors.slug && <p id="slug-error" class="error-text">{errors.slug}</p>}
+    </div>
+    <div class="field" id="field-description">
+      <label for="description" class="label">Description <span class="font-normal text-ink-3">(optional)</span></label>
+      <textarea id="description" name="description" maxlength="5000" rows="5" class="input" aria-describedby={describedBy('description', 'description-hint')}>{values.description}</textarea>
+      <p id="description-hint" class="hint">What the lesson covers and what to revise first. Blank lines start new paragraphs.</p>
+      {errors.description && <p id="description-error" class="error-text">{errors.description}</p>}
+    </div>
+  </fieldset>
+
+  <fieldset class="grid gap-5" id="field-artifacts">
+    <legend class="mb-4 text-lg font-bold">Video and notes</legend>
+    <p class="-mt-3 text-sm text-ink-2">A lesson needs a video, at least one PDF, or both before it can be published.</p>
+    {errors.artifacts && <p class="notice notice-error" role="alert"><Icon name="alert" class="mt-0.5 shrink-0" />{errors.artifacts}</p>}
+
+    <div class="field" id="field-youtube">
+      <label for="youtube" class="label">YouTube link <span class="font-normal text-ink-3">(optional)</span></label>
+      <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+        <div class="grid gap-1.5">
+          <input id="youtube" name="youtube" value={values.youtube} inputmode="url" autocomplete="off" placeholder="https://youtu.be/…" class="input" aria-invalid={errors.youtube ? 'true' : undefined} aria-describedby={describedBy('youtube', 'youtube-hint')} data-youtube />
+          <p id="youtube-hint" class="hint">Any YouTube link works: watch, share, shorts or live. We check it can be embedded when you save.</p>
+          {errors.youtube && <p id="youtube-error" class="error-text">{errors.youtube}</p>}
+        </div>
+        <div class="yt-preview aspect-video overflow-hidden rounded-lg bg-surface-2 ring-1 ring-line" aria-hidden="true">
+          <img src={youtubeId ? thumbnailUrl(youtubeId, 'mq') : undefined} alt="" width="320" height="180" class="h-full w-full object-cover" hidden={!youtubeId} data-yt-thumb />
+        </div>
+      </div>
+      {
+        lesson && youtubeId && lesson.videoStatus === 'unavailable' && (
+          <div class="notice notice-warn mt-1" role="note">
+            <Icon name="alert" class="mt-0.5 shrink-0" />
+            <div class="flex flex-1 flex-wrap items-center justify-between gap-3">
+              <p>YouTube says this video can’t be embedded (removed, private, or embedding is off). Students see the notes first and a link to YouTube.</p>
+              <button type="submit" formaction={actions.recheckVideo} formnovalidate class="btn btn-sm">
+                <Icon name="refresh" size={16} />
+                Check again
+              </button>
+            </div>
+          </div>
+        )
+      }
+    </div>
+
+    <div class="grid gap-3" id="field-files">
+      <h3 class="label">PDFs</h3>
+      {errors.files && <p class="error-text" role="alert">{errors.files}</p>}
+      {
+        orderedFiles.length > 0 && (
+          <ul class="divide-y divide-line rounded-xl border border-line" data-file-list>
+            {orderedFiles.map((file) => (
+              <li class="file-row grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 p-3 sm:grid-cols-[auto_minmax(0,1fr)_9rem_auto]" data-file-row>
+                <input type="hidden" name="fileOrder" value={file.id} />
+                <Icon name="file" class="text-ink-3" />
+                <div class="min-w-0">
+                  <p class="truncate font-semibold">{file.originalName}</p>
+                  <p class="text-sm text-ink-3">{formatBytes(file.sizeBytes)}</p>
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                  <label class="sr-only" for={`kind_${file.id}`}>Kind of file for {file.originalName}</label>
+                  <select id={`kind_${file.id}`} name={`kind_${file.id}`} class="input min-h-10 text-sm">
+                    {FILE_KINDS.map((kind) => (
+                      <option value={kind} selected={(values.kinds[file.id] ?? file.kind) === kind}>
+                        {t(`fileKinds.${kind}`)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div class="col-span-2 flex items-center gap-1 sm:col-span-1">
+                  <button type="button" class="btn btn-quiet btn-sm js-only" data-move="up" aria-label={`Move ${file.originalName} up`} hidden>
+                    <Icon name="arrow-up" size={16} />
+                  </button>
+                  <button type="button" class="btn btn-quiet btn-sm js-only" data-move="down" aria-label={`Move ${file.originalName} down`} hidden>
+                    <Icon name="arrow-down" size={16} />
+                  </button>
+                  <label class="btn btn-quiet btn-sm remove-toggle cursor-pointer">
+                    <input type="checkbox" name="removeFile" value={file.id} checked={removed.has(file.id)} class="size-4 accent-[var(--danger)]" />
+                    Remove
+                  </label>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+
+      <div class="grid gap-3 sm:grid-cols-3">
+        {
+          FILE_KINDS.map((kind) => (
+            <div class="picker relative rounded-xl border border-dashed border-line-strong p-4 transition-colors duration-150 focus-within:border-ink-3 hover:bg-surface" data-picker>
+              <label for={`new_${kind}`} class="flex cursor-pointer flex-col gap-1">
+                <span class="flex items-center gap-2 font-semibold">
+                  <Icon name="upload" size={18} class="text-ink-3" />
+                  Add {t(`fileKinds.${kind}`).toLowerCase()}
+                </span>
+                <span class="text-sm text-ink-3">PDF, up to {formatBytes(MAX_FILE_BYTES)} each</span>
+              </label>
+              <input id={`new_${kind}`} name={`new_${kind}`} type="file" accept="application/pdf,.pdf" multiple class="mt-3 block w-full text-sm text-ink-2 file:mr-3 file:cursor-pointer file:rounded-ui file:border file:border-line-strong file:bg-bg file:px-3 file:py-1.5 file:font-semibold file:text-ink" />
+              <ul class="mt-2 grid gap-1 text-sm empty:hidden" data-picked aria-live="polite" />
+            </div>
+          ))
+        }
+      </div>
+      <p class="hint">Students always see files in this order: notes first, then practice, then solutions.</p>
+    </div>
+  </fieldset>
+
+  <div class="form-actions sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-bg px-4 py-3 md:-mx-0 md:rounded-xl md:border md:px-4">
+    <div class="upload-progress hidden w-full" data-progress>
+      <div class="flex justify-between text-sm"><span data-progress-label>Uploading…</span><span class="tabular-nums" data-progress-pct>0%</span></div>
+      <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2"><div class="h-full origin-left scale-x-0 rounded-full bg-ink transition-transform duration-150" data-progress-bar></div></div>
+    </div>
+    {
+      lesson?.status === 'published' ? (
+        <>
+          <button type="submit" name="intent" value="save" class="btn btn-primary">Save changes</button>
+          <button type="submit" name="intent" value="unpublish" class="btn btn-quiet">Unpublish</button>
+        </>
+      ) : (
+        <>
+          <button type="submit" name="intent" value="publish" class="btn btn-primary">Publish</button>
+          <button type="submit" name="intent" value="draft" class="btn">Save draft</button>
+        </>
+      )
+    }
+    {
+      lesson && (
+        <a href={lesson.publicPath ?? `/admin/lessons/${lesson.id}/preview`} target="_blank" class="btn btn-quiet ml-auto">
+          <Icon name="eye" size={18} />
+          {lesson.publicPath ? 'View live' : 'Preview'}
+        </a>
+      )
+    }
+  </div>
+</form>
+
+<style>
+  .new-chapter {
+    display: none;
+  }
+  .lesson-form:has(#chapterId option[value='new']:checked) .new-chapter {
+    display: grid;
+  }
+  .file-row:has(input[name='removeFile']:checked) {
+    background: var(--danger-wash);
+  }
+  .file-row:has(input[name='removeFile']:checked) p:first-child {
+    text-decoration: line-through;
+  }
+  .form-actions {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    box-shadow: var(--shadow-sticky);
+  }
+  @media (min-width: 48rem) {
+    .form-actions {
+      bottom: 1rem;
+    }
+  }
+  .upload-progress.is-active {
+    display: block;
+  }
+</style>
+
+<script>
+  import { formatBytes } from '../../lib/files';
+  import { parseYouTubeId, thumbnailUrl } from '../../lib/youtube';
+  import { slugify } from '../../lib/slug';
+
+  const form = document.querySelector<HTMLFormElement>('.lesson-form');
+  if (form) {
+    const maxFile = Number(form.dataset.maxFile);
+    const maxTotal = Number(form.dataset.maxTotal);
+    document.getElementById('form-errors')?.focus();
+
+    // Slug follows the title until the tutor edits it by hand.
+    const title = form.querySelector<HTMLInputElement>('#title');
+    const slug = form.querySelector<HTMLInputElement>('[data-slug]');
+    if (title && slug && !slug.readOnly) {
+      let touched = slug.value !== '' && slug.value !== slugify(title.value);
+      slug.addEventListener('input', () => (touched = slug.value !== ''));
+      title.addEventListener('input', () => {
+        if (!touched) slug.value = slugify(title.value);
+      });
+    }
+
+    // Live YouTube thumbnail preview.
+    const yt = form.querySelector<HTMLInputElement>('[data-youtube]');
+    const thumb = form.querySelector<HTMLImageElement>('[data-yt-thumb]');
+    yt?.addEventListener('input', () => {
+      const id = parseYouTubeId(yt.value);
+      if (thumb) {
+        thumb.hidden = !id;
+        if (id) thumb.src = thumbnailUrl(id, 'mq');
+      }
+    });
+
+    // Reorder existing files (order is read from DOM position on submit).
+    const list = form.querySelector('[data-file-list]');
+    form.querySelectorAll<HTMLButtonElement>('.js-only').forEach((b) => (b.hidden = false));
+    list?.addEventListener('click', (event) => {
+      const button = (event.target as Element).closest<HTMLButtonElement>('[data-move]');
+      const row = button?.closest('[data-file-row]');
+      if (!button || !row) return;
+      const sibling = button.dataset.move === 'up' ? row.previousElementSibling : row.nextElementSibling;
+      if (!sibling) return;
+      // insertBefore: Worker type definitions shadow the DOM's Element.before/after.
+      row.parentNode!.insertBefore(row, button.dataset.move === 'up' ? sibling : sibling.nextSibling);
+      button.focus();
+    });
+
+    // Show picked files with sizes; flag oversize ones before anything is sent.
+    const pickers = [...form.querySelectorAll<HTMLInputElement>('input[type="file"]')];
+    const validateFiles = () => {
+      let total = 0;
+      let problem = '';
+      for (const input of pickers) {
+        const out = input.closest('[data-picker]')?.querySelector('[data-picked]');
+        if (!out) continue;
+        out.innerHTML = '';
+        for (const file of input.files ?? []) {
+          total += file.size;
+          const li = document.createElement('li');
+          const tooBig = file.size > maxFile;
+          li.className = tooBig ? 'error-text' : 'text-ink-2';
+          li.textContent = `${file.name} · ${formatBytes(file.size)}${tooBig ? ` (over ${formatBytes(maxFile)})` : ''}`;
+          out.appendChild(li);
+          if (tooBig) problem = `“${file.name}” is over ${formatBytes(maxFile)}. Compress it or split it, then choose it again.`;
+        }
+      }
+      if (!problem && total > maxTotal) problem = `These PDFs add up to ${formatBytes(total)}. Upload up to ${formatBytes(maxTotal)} per save.`;
+      pickers[0]?.setCustomValidity(problem);
+      return problem;
+    };
+    pickers.forEach((p) => p.addEventListener('change', validateFiles));
+
+    // Upload with progress when PDFs are attached. Without JS the form posts normally.
+    const progress = form.querySelector<HTMLElement>('[data-progress]');
+    form.addEventListener('submit', (event) => {
+      const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
+      if (submitter?.formAction && submitter.formAction !== form.action) return;
+      const problem = validateFiles();
+      if (problem) {
+        event.preventDefault();
+        pickers[0]?.reportValidity();
+        return;
+      }
+      const hasFiles = pickers.some((p) => p.files?.length);
+      if (!hasFiles || !progress) return;
+
+      event.preventDefault();
+      const data = new FormData(form, submitter);
+      const xhr = new XMLHttpRequest();
+      const bar = progress.querySelector<HTMLElement>('[data-progress-bar]')!;
+      const pct = progress.querySelector<HTMLElement>('[data-progress-pct]')!;
+      const label = progress.querySelector<HTMLElement>('[data-progress-label]')!;
+      progress.classList.add('is-active');
+      form.querySelectorAll<HTMLButtonElement>('button[type="submit"]').forEach((b) => (b.disabled = true));
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (!e.lengthComputable) return;
+        const ratio = e.loaded / e.total;
+        bar.style.transform = `scaleX(${ratio})`;
+        pct.textContent = `${Math.round(ratio * 100)}%`;
+        if (ratio >= 1) label.textContent = 'Saving and checking the video…';
+      });
+      xhr.addEventListener('load', () => {
+        const target = new URL(xhr.responseURL);
+        const posted = new URL(form.action);
+        if (target.pathname !== posted.pathname || target.search !== posted.search) {
+          location.assign(target.href);
+          return;
+        }
+        // Validation errors: render the server's response in place, keeping the page's own URL.
+        const pageUrl = location.href;
+        document.open();
+        document.write(xhr.responseText);
+        document.close();
+        history.replaceState(null, '', pageUrl);
+      });
+      xhr.addEventListener('error', () => {
+        progress.classList.remove('is-active');
+        form.querySelectorAll<HTMLButtonElement>('button[type="submit"]').forEach((b) => (b.disabled = false));
+        label.textContent = 'Uploading…';
+        alertBox('The upload didn’t finish. Check your connection and try again; nothing was saved.');
+      });
+      xhr.open('POST', form.action);
+      xhr.send(data);
+    });
+
+    function alertBox(message: string) {
+      let box = form!.querySelector<HTMLElement>('[data-upload-error]');
+      if (!box) {
+        box = document.createElement('p');
+        box.className = 'notice notice-error w-full';
+        box.setAttribute('role', 'alert');
+        box.dataset.uploadError = '';
+        progress?.parentNode?.insertBefore(box, progress);
+      }
+      box.textContent = message;
+    }
+  }
+</script>

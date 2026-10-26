@@ -1,0 +1,56 @@
+---
+import { t } from '../i18n';
+import Icon from './Icon.astro';
+---
+
+<button
+  type="button"
+  class="btn btn-quiet btn-sm theme-toggle"
+  data-label-dark={t('site.themeToDark')}
+  data-label-light={t('site.themeToLight')}
+  aria-label={t('site.themeToDark')}
+>
+  <span class="icon-moon"><Icon name="moon" /></span>
+  <span class="icon-sun"><Icon name="sun" /></span>
+</button>
+
+<style>
+  .icon-sun {
+    display: none;
+  }
+  :global(:root[data-theme='dark']) .icon-sun {
+    display: block;
+  }
+  :global(:root[data-theme='dark']) .icon-moon {
+    display: none;
+  }
+  @media (prefers-color-scheme: dark) {
+    :global(:root:not([data-theme='light'])) .icon-sun {
+      display: block;
+    }
+    :global(:root:not([data-theme='light'])) .icon-moon {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  const root = document.documentElement;
+  const isDark = () =>
+    root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>('.theme-toggle')) {
+    const sync = () => {
+      button.setAttribute('aria-label', isDark() ? button.dataset.labelLight! : button.dataset.labelDark!);
+    };
+    sync();
+    button.addEventListener('click', () => {
+      const next = isDark() ? 'light' : 'dark';
+      root.dataset.theme = next;
+      try {
+        localStorage.setItem('tl:theme', next);
+      } catch {}
+      sync();
+    });
+  }
+</script>

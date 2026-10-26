@@ -1,0 +1,33 @@
+---
+import { t } from '../i18n';
+import Icon from './Icon.astro';
+
+interface Props {
+  value?: string;
+  track?: string;
+  autofocus?: boolean;
+  id?: string;
+}
+const { value = '', track, autofocus = false, id = 'q' } = Astro.props;
+---
+
+<form action="/search" method="get" role="search" class="search-field flex gap-2" data-search-form>
+  <label for={id} class="sr-only">{t('search.label')}</label>
+  <div class="relative flex-1">
+    <Icon name="search" class="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 text-ink-3" />
+    <input
+      id={id}
+      name="q"
+      type="search"
+      value={value}
+      autocomplete="off"
+      enterkeyhint="search"
+      spellcheck="false"
+      placeholder={t('search.placeholder')}
+      autofocus={autofocus}
+      class="input min-h-13 rounded-xl pl-12 text-base shadow-[0_1px_0_var(--line)]"
+    />
+  </div>
+  {track && <input type="hidden" name="track" value={track} />}
+  <button type="submit" class="btn min-h-13 rounded-xl px-5">{t('search.submit')}</button>
+</form>

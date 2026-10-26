@@ -12,14 +12,27 @@
 		"astro": "astro",
 		"generate-types": "wrangler types",
 		"deploy": "astro build && wrangler deploy",
-		"cf-typegen": "wrangler types"
+		"cf-typegen": "wrangler types",
+		"lint": "oxlint",
+		"lint:fix": "oxlint --fix",
+		"fmt": "oxfmt",
+		"fmt:check": "oxfmt --check"
 	},
 	"dependencies": {
 		"@astrojs/cloudflare": "^14.4.2",
-		"astro": "^7.4.2"
+		"@tailwindcss/vite": "^4.3.3",
+		"astro": "^7.4.2",
+		"drizzle-orm": "^0.45.4",
+		"tailwindcss": "^4.3.3"
 	},
 	"devDependencies": {
+		"@astrojs/check": "^0.9.12",
 		"@types/node": "^26.6.5",
+		"drizzle-kit": "^0.31.11",
+		"oxfmt": "^0.74.0",
+		"oxlint": "^1.89.0",
+		"sharp": "0.35.5",
+		"typescript": "^6.0.3",
 		"wrangler": "^4.152.0"
 	}
 }

@@ -1,0 +1,47 @@
+---
+import type { LessonFile } from '../db/schema';
+import { t } from '../i18n';
+import { fileUrl, formatBytes } from '../lib/files';
+import Icon from './Icon.astro';
+
+interface Props {
+  files: LessonFile[];
+  heading?: string;
+}
+const { files, heading = t('lesson.files') } = Astro.props;
+---
+
+{
+  files.length > 0 && (
+    <section aria-labelledby="files-heading">
+      <h2 id="files-heading" class="eyebrow">
+        {heading}
+      </h2>
+      <ul class="mt-2 divide-y divide-line border-y border-line">
+        {files.map((file) => {
+          const label = t(`fileKinds.${file.kind}`);
+          const size = formatBytes(file.sizeBytes);
+          const url = fileUrl(file.r2Key);
+          return (
+            <li class="flex items-center gap-3 py-3">
+              <Icon name="file" class="shrink-0 text-ink-3" />
+              <span class="min-w-0 flex-1">
+                <span class="block font-semibold">{label}</span>
+                <span class="print-url block text-sm text-ink-3" data-url={url}>
+                  PDF · {size}
+                </span>
+              </span>
+              <a href={url} class="btn btn-quiet btn-sm no-print" aria-label={t('lesson.openAria', { label })} target="_blank" rel="noopener">
+                {t('lesson.open')}
+              </a>
+              <a href={`${url}?download=1`} download class="btn btn-sm no-print" aria-label={t('lesson.downloadAria', { label, size })}>
+                <Icon name="download" size={16} />
+                {t('lesson.download')}
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  )
+}

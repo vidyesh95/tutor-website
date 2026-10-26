@@ -1,0 +1,34 @@
+---
+// Writes the course outline into device memory so home can offer "continue" without a request.
+import type { Course } from '../lib/queries';
+import { TRACKS } from '../lib/tracks';
+
+interface Props {
+  course: Course;
+  /** Lesson being viewed; recorded as last opened. */
+  openedLessonId?: number;
+}
+const { course, openedLessonId } = Astro.props;
+const base = `/${course.subject.track}/${course.subject.slug}`;
+const record = {
+  id: course.subject.id,
+  name: course.subject.name,
+  track: TRACKS[course.subject.track].label,
+  url: base,
+  lessons: course.chapters.flatMap((c) => c.lessons.map((l) => [l.id, l.title, `${base}/${l.slug}`])),
+};
+---
+
+<script is:inline define:vars={{ record, openedLessonId }}>
+  (function () {
+    var courses = TL.read('tl:courses', {});
+    var prev = courses[record.id] || {};
+    record.last = openedLessonId || prev.last || null;
+    record.at = openedLessonId ? Date.now() : prev.at || 0;
+    // Only lesson visits make a course "most recent"; browsing an outline shouldn't hijack continue.
+    if (openedLessonId || prev.at) {
+      courses[record.id] = record;
+      TL.write('tl:courses', courses);
+    }
+  })();
+</script>
