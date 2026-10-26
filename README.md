@@ -32,6 +32,8 @@ The repo is wired to the original owner's Cloudflare resources. A fork must crea
    npx wrangler secret put ADMIN_PASSWORD
    npx wrangler secret put SESSION_SECRET            # openssl rand -hex 32
    ```
+
+   Use `wrangler secret put` as shown. Cloudflare's Secrets Store isn't needed, and `.dev.vars` is only for local development (`cp .dev.vars.example .dev.vars`).
 5. **Schema and first deploy**
    ```sh
    npx wrangler d1 migrations apply tutor-db --remote
