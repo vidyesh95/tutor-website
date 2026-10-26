@@ -2,7 +2,7 @@
 // unless a caller explicitly asks for an admin preview.
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
-import { chapters, lessonFiles, lessons, subjects, type FileKind, type LessonFile } from '../db/schema';
+import { chapters, lessonFiles, lessons, subjects, tutorProfile, type FileKind, type LessonFile } from '../db/schema';
 import { getDb } from './db';
 import { FILE_KINDS } from './files';
 import { toFtsQuery } from './search-index';
@@ -47,6 +47,9 @@ export type CourseLesson = {
   number: number;
   hasVideo: boolean;
   kinds: FileKind[];
+  /** First notes PDF (or first file) for the one-tap PDF button. */
+  primaryFile: { r2Key: string; sizeBytes: number; kind: FileKind } | null;
+  fileCount: number;
 };
 
 export type CourseChapter = { id: number; name: string; number: number; lessons: CourseLesson[] };
@@ -55,6 +58,7 @@ export type Course = {
   subject: { id: number; track: TrackId; name: string; slug: string };
   chapters: CourseChapter[];
   lessonCount: number;
+  fileCount: number;
 };
 
 /** Published, ordered course outline. Returns null when nothing public exists for the subject. */
@@ -83,7 +87,13 @@ export async function getCourse(track: TrackId, subjectSlug: string): Promise<Co
   if (!rows.length) return null;
 
   const kindRows = await db
-    .select({ lessonId: lessonFiles.lessonId, kind: lessonFiles.kind })
+    .select({
+      lessonId: lessonFiles.lessonId,
+      kind: lessonFiles.kind,
+      r2Key: lessonFiles.r2Key,
+      sizeBytes: lessonFiles.sizeBytes,
+      position: lessonFiles.position,
+    })
     .from(lessonFiles)
     .where(
       inArray(
@@ -91,10 +101,10 @@ export async function getCourse(track: TrackId, subjectSlug: string): Promise<Co
         rows.map((r) => r.id),
       ),
     );
-  const kindsByLesson = new Map<number, Set<FileKind>>();
-  for (const { lessonId, kind } of kindRows) {
-    if (!kindsByLesson.has(lessonId)) kindsByLesson.set(lessonId, new Set());
-    kindsByLesson.get(lessonId)!.add(kind);
+  const filesByLesson = new Map<number, typeof kindRows>();
+  for (const row of kindRows) {
+    if (!filesByLesson.has(row.lessonId)) filesByLesson.set(row.lessonId, []);
+    filesByLesson.get(row.lessonId)!.push(row);
   }
 
   const chapterList: CourseChapter[] = [];
@@ -104,18 +114,23 @@ export async function getCourse(track: TrackId, subjectSlug: string): Promise<Co
       chapter = { id: row.chapterId, name: row.chapterName, number: chapterList.length + 1, lessons: [] };
       chapterList.push(chapter);
     }
-    const kinds = kindsByLesson.get(row.id);
+    const files = (filesByLesson.get(row.id) ?? []).sort(
+      (a, b) => FILE_KINDS.indexOf(a.kind) - FILE_KINDS.indexOf(b.kind) || a.position - b.position,
+    );
+    const kinds = new Set(files.map((f) => f.kind));
     chapter.lessons.push({
       id: row.id,
       title: row.title,
       slug: row.slug,
       number: chapter.lessons.length + 1,
       hasVideo: !!row.youtubeId && row.videoStatus !== 'unavailable',
-      kinds: FILE_KINDS.filter((k) => kinds?.has(k)),
+      kinds: FILE_KINDS.filter((k) => kinds.has(k)),
+      primaryFile: files[0] ? { r2Key: files[0].r2Key, sizeBytes: files[0].sizeBytes, kind: files[0].kind } : null,
+      fileCount: files.length,
     });
   }
 
-  return { subject, chapters: chapterList, lessonCount: rows.length };
+  return { subject, chapters: chapterList, lessonCount: rows.length, fileCount: kindRows.length };
 }
 
 export type LessonDetail = {
@@ -198,12 +213,20 @@ const markup = (s: string | null) => escapeHtml(s ?? '').replaceAll('\u0001', '<
 
 export const SEARCH_PAGE_SIZE = 20;
 
-export async function searchLessons(q: string, opts: { track?: TrackId; page?: number } = {}) {
+export async function searchLessons(q: string, opts: { track?: TrackId; subjectId?: number; page?: number } = {}) {
   const match = toFtsQuery(q);
   if (!match) return { hits: [] as SearchHit[], total: 0 };
   const page = Math.max(1, opts.page ?? 1);
-  const trackClause = opts.track ? 'AND s.track = ?2' : '';
-  const binds: unknown[] = opts.track ? [match, opts.track] : [match];
+  const binds: unknown[] = [match];
+  let trackClause = '';
+  if (opts.track) {
+    binds.push(opts.track);
+    trackClause += ` AND s.track = ?${binds.length}`;
+  }
+  if (opts.subjectId) {
+    binds.push(opts.subjectId);
+    trackClause += ` AND s.id = ?${binds.length}`;
+  }
 
   const from = `
     FROM lessons_fts
@@ -263,4 +286,91 @@ export async function getSitemapEntries() {
      ORDER BY s.track, s.position, c.position, l.position`,
   ).all<{ track: TrackId; subjectSlug: string; slug: string; updatedAt: string }>();
   return results;
+}
+
+export type LessonCard = {
+  id: number;
+  track: TrackId;
+  subjectName: string;
+  subjectSlug: string;
+  chapterName: string;
+  title: string;
+  slug: string;
+  description: string;
+  youtubeId: string | null;
+  primaryFile: { r2Key: string; sizeBytes: number; kind: FileKind } | null;
+  kinds: FileKind[];
+};
+
+/** Most recently published lessons, optionally narrowed by track and subject name (across tracks). */
+export async function getLatestLessons(opts: { track?: TrackId; subject?: string; limit?: number } = {}) {
+  const where = [`l.status = 'published'`, 's.archived_at IS NULL', 'c.archived_at IS NULL'];
+  const binds: unknown[] = [];
+  if (opts.track) {
+    binds.push(opts.track);
+    where.push(`s.track = ?${binds.length}`);
+  }
+  if (opts.subject) {
+    binds.push(opts.subject);
+    where.push(`s.name = ?${binds.length} COLLATE NOCASE`);
+  }
+  const clause = where.join(' AND ');
+  const limit = opts.limit ?? 9;
+  const [list, count] = await env.DB.batch([
+    env.DB.prepare(
+      `SELECT l.id, s.track, s.name AS subjectName, s.slug AS subjectSlug, c.name AS chapterName, l.title, l.slug,
+         l.description, CASE WHEN l.video_status = 'unavailable' THEN NULL ELSE l.youtube_id END AS youtubeId
+       FROM lessons l JOIN subjects s ON s.id = l.subject_id JOIN chapters c ON c.id = l.chapter_id
+       WHERE ${clause}
+       ORDER BY l.published_at DESC, l.id DESC
+       LIMIT ${limit}`,
+    ).bind(...binds),
+    env.DB.prepare(
+      `SELECT count(*) AS total FROM lessons l JOIN subjects s ON s.id = l.subject_id JOIN chapters c ON c.id = l.chapter_id WHERE ${clause}`,
+    ).bind(...binds),
+  ]);
+  const rows = list.results as Omit<LessonCard, 'primaryFile' | 'kinds'>[];
+  const files = rows.length
+    ? await getDb()
+        .select({ lessonId: lessonFiles.lessonId, kind: lessonFiles.kind, r2Key: lessonFiles.r2Key, sizeBytes: lessonFiles.sizeBytes, position: lessonFiles.position })
+        .from(lessonFiles)
+        .where(inArray(lessonFiles.lessonId, rows.map((r) => r.id)))
+    : [];
+  const cards: LessonCard[] = rows.map((r) => {
+    const own = files
+      .filter((f) => f.lessonId === r.id)
+      .sort((a, b) => FILE_KINDS.indexOf(a.kind) - FILE_KINDS.indexOf(b.kind) || a.position - b.position);
+    const kinds = new Set(own.map((f) => f.kind));
+    return {
+      ...r,
+      primaryFile: own[0] ? { r2Key: own[0].r2Key, sizeBytes: own[0].sizeBytes, kind: own[0].kind } : null,
+      kinds: FILE_KINDS.filter((k) => kinds.has(k)),
+    };
+  });
+  return { cards, total: (count.results[0] as { total: number }).total };
+}
+
+/** Distinct public subject names, for the subject filter chips. */
+export async function getSubjectNames(track?: TrackId) {
+  const { results } = await env.DB.prepare(
+    `SELECT s.name, count(*) AS n FROM lessons l JOIN subjects s ON s.id = l.subject_id JOIN chapters c ON c.id = l.chapter_id
+     WHERE l.status = 'published' AND s.archived_at IS NULL AND c.archived_at IS NULL ${track ? 'AND s.track = ?1' : ''}
+     GROUP BY s.name COLLATE NOCASE ORDER BY n DESC, s.name`,
+  )
+    .bind(...(track ? [track] : []))
+    .all<{ name: string; n: number }>();
+  return results.map((r) => r.name);
+}
+
+/** Navigation around a course: other subjects in its track, and the same subject in other tracks. */
+export async function getCourseNeighbours(track: TrackId, subjectSlug: string) {
+  const index = await getLibraryIndex();
+  const sameTrack = index.get(track) ?? [];
+  const sameSubject = [...index.values()].flat().filter((s) => s.slug === subjectSlug);
+  return { sameTrack, sameSubject };
+}
+
+export async function getTutorProfile() {
+  const [row] = await getDb().select().from(tutorProfile).where(eq(tutorProfile.id, 1));
+  return row?.name ? row : null;
 }

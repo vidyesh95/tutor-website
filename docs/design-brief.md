@@ -129,5 +129,15 @@ interaction-design.md, spatial-design.md, responsive-design.md, color-and-contra
 - `imageService: 'passthrough'` (no raster processing), `session: false` (no KV namespace).
 - Drag-to-reorder was not built; up/down buttons cover it and are keyboard-first.
 
-## 13. Open (resolve during build)
+## 13. v3: richer student side (2026-10-26)
+Requested from reference screenshots; amber identity kept, structure adopted.
+- **Canvas + panels:** page is a soft tinted canvas (`--canvas`); content sits on raised `.panel`s (`--bg`, 1px line, faint shadow). Never nested.
+- **Header:** track navigation + About (scrolls horizontally on phones). **Footer:** tracks, library links, tutor sign in.
+- **Home:** hero panel (badge, search, Level and Subject filter chips via `?track=&subject=`, Continue card), "Latest lessons" grid of 9 (6 on phones) using `LessonCard` (YouTube thumbnail or ruled-paper tile for notes-only, one-tap PDF), "Browse by track" panels, tutor card + "How this library works".
+- **Course:** segmented control for the same subject in other tracks, subject chips for the track, numbered chapter panels (collapsed ones preview lesson titles), PDF + Watch per lesson row, up-next row in amber wash; sidebar with progress + Continue (the one amber action), course-scoped search (`/search?subject=<id>`), tutor. Phones get a progress/Continue strip above the chapters.
+- **Lesson:** meta chips, video, `DownloadPanel` (under the video on phones, sidebar on desktop; a single PDF collapses to one strong button), action bar (Mark as done, Share, YouTube), About panel, chapter panel with now-playing state and Previous/Next, tutor card.
+- **Tutor profile:** single-row `tutor_profile` table (migration 0002), edited at `/admin/profile`; photo cropped to a 480px WebP in the browser, type-sniffed on the server, served from `/media/<key>` only while current. Hidden everywhere while the name is empty.
+- `.btn-ink` (dark neutral) carries strong secondary actions so amber stays rare.
+
+## 14. Open (resolve during build)
 - None blocking. Later: add WAF rate-limit rule in front of the D1 counter if the site moves to a custom domain zone on a plan that offers the window.

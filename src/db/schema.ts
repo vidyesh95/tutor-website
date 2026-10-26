@@ -101,3 +101,15 @@ export type Chapter = typeof chapters.$inferSelect;
 export type Lesson = typeof lessons.$inferSelect;
 export type LessonFile = typeof lessonFiles.$inferSelect;
 export type FileKind = LessonFile['kind'];
+
+/** Single-row table (id = 1): the tutor's public profile. Empty name means "don't show". */
+export const tutorProfile = sqliteTable('tutor_profile', {
+  id: integer('id').primaryKey(),
+  name: text('name').notNull().default(''),
+  headline: text('headline').notNull().default(''),
+  bio: text('bio').notNull().default(''),
+  photoKey: text('photo_key'),
+  updatedAt: text('updated_at').default(now).notNull(),
+});
+
+export type TutorProfile = typeof tutorProfile.$inferSelect;

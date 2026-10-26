@@ -10,12 +10,13 @@ interface Props {
   title: string;
   /** Login screen shows no navigation. */
   bare?: boolean;
-  current?: 'lessons' | 'structure';
+  current?: 'lessons' | 'structure' | 'profile';
 }
 const { title, bare = false, current } = Astro.props;
 const nav = [
   { id: 'lessons', label: t('admin.lessons'), href: '/admin' },
   { id: 'structure', label: t('admin.structure'), href: '/admin/structure' },
+  { id: 'profile', label: 'Tutor profile', href: '/admin/profile' },
 ];
 ---
 

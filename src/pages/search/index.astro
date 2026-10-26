@@ -13,7 +13,7 @@ const tracks = result.q ? [] : [...(await getLibraryIndex()).entries()].filter((
 
 <Base title={result.q ? t('search.resultsFor', { q: result.q }) : t('search.title')} headerSearch={false} noindex={!!result.q}>
   <div class="wrap max-w-3xl pt-6 md:pt-10">
-    <SearchField value={result.q} track={result.track} autofocus={!result.q} id="search-q" />
+    <SearchField value={result.q} track={result.track} subjectId={result.subjectId} autofocus={!result.q} id="search-q" />
     <div class="mt-8">
       <SearchResults {...result} />
       {

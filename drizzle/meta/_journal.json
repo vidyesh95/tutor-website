@@ -15,6 +15,13 @@
       "when": 1792997233223,
       "tag": "0001_search_index",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793000400442,
+      "tag": "0002_tutor_profile",
+      "breakpoints": true
     }
   ]
 }

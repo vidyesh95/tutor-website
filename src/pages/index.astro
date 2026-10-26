@@ -1,84 +1,284 @@
 ---
 import Base from '../layouts/Base.astro';
+import Icon, { type IconName } from '../components/Icon.astro';
+import LessonCard from '../components/LessonCard.astro';
 import SearchField from '../components/SearchField.astro';
-import SubjectIndex from '../components/SubjectIndex.astro';
-import { t } from '../i18n';
-import { getLibraryIndex } from '../lib/queries';
-import { TRACKS } from '../lib/tracks';
+import TutorCard from '../components/TutorCard.astro';
+import { t, tn } from '../i18n';
+import { getLatestLessons, getLibraryIndex, getSubjectNames, getTutorProfile } from '../lib/queries';
+import { isTrackId, TRACKS } from '../lib/tracks';
 
-const index = await getLibraryIndex();
+const trackParam = Astro.url.searchParams.get('track') ?? undefined;
+const track = isTrackId(trackParam) ? trackParam : undefined;
+const subjectParam = Astro.url.searchParams.get('subject')?.trim() || undefined;
+
+const [index, subjectNames, tutor] = await Promise.all([getLibraryIndex(), getSubjectNames(track), getTutorProfile()]);
+const subject = subjectParam && subjectNames.some((n) => n.toLowerCase() === subjectParam.toLowerCase()) ? subjectParam : undefined;
+const { cards, total } = await getLatestLessons({ track, subject, limit: 9 });
+
 const tracks = [...index.entries()].filter(([, subjects]) => subjects.length > 0);
+const trackTotal = (subjects: { lessonCount: number }[]) => subjects.reduce((n, s) => n + s.lessonCount, 0);
+const libraryTotal = tracks.reduce((n, [, s]) => n + trackTotal(s), 0);
+
+const filterHref = (next: { track?: string; subject?: string }) => {
+  const sp = new URLSearchParams();
+  const tr = 'track' in next ? next.track : track;
+  const su = 'subject' in next ? next.subject : subject;
+  if (tr) sp.set('track', tr);
+  if (su) sp.set('subject', su);
+  const qs = sp.toString();
+  return `/${qs ? `?${qs}` : ''}#latest`;
+};
+const filterLabel = [track && TRACKS[track].label, subject].filter(Boolean).join(' · ');
+
+const how: { icon: IconName; title: string; body: string }[] = [
+  { icon: 'check', title: t('home.how1Title'), body: t('home.how1Body') },
+  { icon: 'arrow-right', title: t('home.how2Title'), body: t('home.how2Body') },
+  { icon: 'download', title: t('home.how3Title'), body: t('home.how3Body') },
+  { icon: 'refresh', title: t('home.how4Title'), body: t('home.how4Body') },
+];
 
 Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
 ---
 
-<Base headerSearch={false}>
-  <section class="wrap pt-8 pb-6 md:pt-16 md:pb-10">
-    <h1 class="max-w-2xl text-2xl font-bold tracking-tight md:text-3xl">{t('search.emptyTitle')}</h1>
-    <p class="mt-2 max-w-2xl text-ink-2">{t('search.emptyBody')}</p>
-    <div class="mt-6 max-w-2xl">
-      <SearchField id="home-q" />
-    </div>
+<Base headerSearch={false} preconnectYouTube={cards.some((c) => c.youtubeId)}>
+  <div class="wrap pt-5 md:pt-8">
+    <section class="panel p-5 md:p-10" aria-labelledby="hero-title">
+      <span class="chip-static">
+        <span class="size-1.5 rounded-full bg-accent-stroke" aria-hidden="true"></span>
+        {t('site.badge')}
+      </span>
+      <h1 id="hero-title" class="mt-4 max-w-2xl text-2xl font-bold tracking-tight md:text-3xl">{t('search.emptyTitle')}</h1>
+      <p class="mt-2 max-w-2xl text-ink-2">{t('home.lead')}</p>
 
-    <!-- Continue row: built before first paint from device memory, so nothing shifts. -->
-    <div id="continue" class="max-w-2xl"></div>
-    <script is:inline define:vars={{ copy: { label: t('home.continueLabel'), next: t('home.upNext'), review: t('home.reviewLast'), cta: t('home.continueCta') } }}>
-      (function () {
-        var courses = TL.read('tl:courses', {});
-        var latest = null;
-        for (var id in courses) if (!latest || courses[id].at > latest.at) latest = courses[id];
-        if (!latest || !latest.lessons || !latest.lessons.length) return;
-        var r = TL.resume(latest, TL.done());
-        if (!r) return;
-        var el = document.getElementById('continue');
-        el.innerHTML =
-          '<a class="continue-card" href="">' +
-          '<span class="eyebrow"></span>' +
-          '<span class="continue-title"></span>' +
-          '<span class="continue-meta"></span>' +
-          '<span class="btn btn-primary btn-sm continue-cta"></span></a>';
-        var a = el.firstChild;
-        a.href = r.lesson[2];
-        a.querySelector('.eyebrow').textContent = copy.label;
-        a.querySelector('.continue-title').textContent = r.lesson[1];
-        a.querySelector('.continue-meta').textContent =
-          latest.track + ' · ' + latest.name + ' · ' + (r.complete ? copy.review : copy.next);
-        a.querySelector('.continue-cta').textContent = copy.cta;
-      })();
-    </script>
-  </section>
+      <div class="mt-6 max-w-3xl">
+        <SearchField id="home-q" />
+      </div>
 
-  <div class="wrap">
+      {
+        libraryTotal > 0 && (
+          <div class="mt-6 grid max-w-4xl gap-3">
+            <div class="filter-row">
+              <span class="filter-label">{t('home.level')}</span>
+              <ul class="chip-row">
+                <li>
+                  <a href={filterHref({ track: undefined, subject: undefined })} class="chip" aria-current={!track ? 'true' : undefined}>
+                    {t('home.all')} <span class="chip-count">{libraryTotal}</span>
+                  </a>
+                </li>
+                {tracks.map(([id, subjects]) => (
+                  <li>
+                    <a href={filterHref({ track: id, subject: undefined })} class="chip" aria-current={track === id ? 'true' : undefined}>
+                      {TRACKS[id].label} <span class="chip-count">{trackTotal(subjects)}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {subjectNames.length > 1 && (
+              <div class="filter-row">
+                <span class="filter-label">{t('home.subject')}</span>
+                <ul class="chip-row">
+                  <li>
+                    <a href={filterHref({ subject: undefined })} class="chip" aria-current={!subject ? 'true' : undefined}>
+                      {t('home.all')}
+                    </a>
+                  </li>
+                  {subjectNames.map((name) => (
+                    <li>
+                      <a href={filterHref({ subject: name })} class="chip" aria-current={subject?.toLowerCase() === name.toLowerCase() ? 'true' : undefined}>
+                        {name}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      <!-- Continue row: built before first paint from device memory, so nothing shifts. -->
+      <div id="continue" class="max-w-3xl"></div>
+      <script
+        is:inline
+        define:vars={{ copy: { label: t('home.continueLabel'), next: t('home.upNext'), review: t('home.reviewLast'), cta: t('home.continueCta') } }}
+      >
+        (function () {
+          var courses = TL.read('tl:courses', {});
+          var latest = null;
+          for (var id in courses) if (!latest || courses[id].at > latest.at) latest = courses[id];
+          if (!latest || !latest.lessons || !latest.lessons.length) return;
+          var r = TL.resume(latest, TL.done());
+          if (!r) return;
+          var el = document.getElementById('continue');
+          el.innerHTML =
+            '<a class="continue-card" href="">' +
+            '<span class="eyebrow"></span>' +
+            '<span class="continue-title"></span>' +
+            '<span class="continue-meta"></span>' +
+            '<span class="btn btn-primary btn-sm continue-cta"></span></a>';
+          var a = el.firstChild;
+          a.href = r.lesson[2];
+          a.querySelector('.eyebrow').textContent = copy.label;
+          a.querySelector('.continue-title').textContent = r.lesson[1];
+          a.querySelector('.continue-meta').textContent = latest.track + ' · ' + latest.name + ' · ' + (r.complete ? copy.review : copy.next);
+          a.querySelector('.continue-cta').textContent = copy.cta;
+        })();
+      </script>
+    </section>
+
     {
-      tracks.length === 0 ? (
-        <section class="max-w-xl border-t border-line py-12">
+      libraryTotal === 0 ? (
+        <section class="panel mt-8 max-w-xl p-6">
           <h2 class="text-xl font-bold">{t('home.emptyTitle')}</h2>
           <p class="mt-2 text-ink-2">{t('home.emptyBody')}</p>
         </section>
       ) : (
-        <div class="grid gap-12 md:gap-16">
-          {tracks.map(([track, subjects]) => (
-            <section aria-labelledby={`track-${track}`} class="grid gap-4 md:grid-cols-[14rem_minmax(0,1fr)] md:gap-10">
-              <div class="md:sticky md:top-6 md:self-start md:pt-3">
-                <h2 id={`track-${track}`} class="text-xl font-bold tracking-tight">
-                  <a href={`/${track}`} class="text-ink no-underline hover:underline hover:decoration-line-strong hover:underline-offset-4">
-                    {TRACKS[track].label}
-                  </a>
+        <>
+          <section id="latest" class="mt-12 scroll-mt-6 md:mt-16" aria-labelledby="latest-title">
+            <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
+              <div>
+                <h2 id="latest-title" class="text-xl font-bold tracking-tight md:text-2xl">
+                  {filterLabel ? t('home.latestFiltered', { filter: filterLabel }) : t('home.latest')}
                 </h2>
-                <p class="mt-0.5 text-sm text-ink-3">{TRACKS[track].blurb}</p>
+                <p class="mt-1 text-sm text-ink-3 tabular-nums">{t('home.showing', { shown: cards.length, total })}</p>
               </div>
-              <SubjectIndex subjects={subjects} />
-            </section>
-          ))}
-        </div>
+              {track && (
+                <a href={`/${track}`} class="flex items-center gap-1 text-sm font-semibold text-ink no-underline hover:underline hover:underline-offset-4">
+                  {t('home.browseTrack', { track: TRACKS[track].label })}
+                  <Icon name="arrow-right" size={16} />
+                </a>
+              )}
+            </div>
+            {cards.length ? (
+              <div class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5" id="lesson-grid">
+                {cards.map((lesson, i) => (
+                  <div class:list={['grid', i >= 6 && 'max-sm:hidden']}>
+                    <LessonCard lesson={lesson} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div class="panel mt-5 p-6">
+                <p class="text-ink-2">{t('home.noneForFilter')}</p>
+                <a href="/#latest" class="btn btn-sm mt-4">
+                  {t('home.clearFilter')}
+                </a>
+              </div>
+            )}
+            <script is:inline>
+              (function () {
+                var done = TL.done();
+                document.querySelectorAll('#lesson-grid [data-lesson-id]').forEach(function (card) {
+                  if (done.has(Number(card.dataset.lessonId))) card.querySelector('.done-flag').hidden = false;
+                });
+              })();
+            </script>
+          </section>
+
+          <section class="mt-14 md:mt-20" aria-labelledby="tracks-title">
+            <h2 id="tracks-title" class="text-xl font-bold tracking-tight md:text-2xl">
+              {t('home.tracksTitle')}
+            </h2>
+            <p class="mt-1 text-sm text-ink-3">{t('home.tracksLead')}</p>
+            <div class="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3 lg:gap-5">
+              {tracks.map(([id, subjects]) => (
+                <section class="panel flex flex-col p-5" aria-labelledby={`track-${id}`}>
+                  <div class="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 id={`track-${id}`} class="text-lg font-bold">
+                        {TRACKS[id].label}
+                      </h3>
+                      <p class="text-sm text-ink-3">{TRACKS[id].blurb}</p>
+                    </div>
+                    <span class="chip-static tabular-nums">{tn('home.lessonsOne', 'home.lessons', trackTotal(subjects))}</span>
+                  </div>
+                  <ul class="mt-4 divide-y divide-line border-y border-line">
+                    {subjects.map((s) => (
+                      <li>
+                        <a href={`/${s.track}/${s.slug}`} class="group flex min-h-11 items-center gap-3 py-2 text-ink no-underline">
+                          <span class="min-w-0 flex-1 truncate font-semibold group-hover:underline group-hover:underline-offset-4">{s.name}</span>
+                          <span class="text-sm text-ink-3 tabular-nums">{tn('home.chaptersOne', 'home.chapters', s.chapterCount)}</span>
+                          <Icon name="chevron-right" size={16} class="text-ink-3" />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                  <a href={`/${id}`} class="mt-auto flex items-center gap-1 pt-4 text-sm font-semibold text-ink no-underline hover:underline hover:underline-offset-4">
+                    {t('home.openTrack', { track: TRACKS[id].label })}
+                    <Icon name="arrow-right" size={16} />
+                  </a>
+                </section>
+              ))}
+            </div>
+          </section>
+        </>
       )
     }
+
+    <section class:list={['mt-14 grid gap-4 md:mt-20 lg:gap-5', tutor && 'lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]']} aria-labelledby="how-title">
+      {
+        tutor && (
+          <div class="panel p-5 md:p-8">
+            <p class="eyebrow mb-4">{t('about.yourTutor')}</p>
+            <TutorCard tutor={tutor} />
+          </div>
+        )
+      }
+      <div class="panel p-5 md:p-8">
+        <h2 id="how-title" class="text-lg font-bold">{t('home.howTitle')}</h2>
+        <ul class:list={['mt-4 grid gap-4', !tutor && 'sm:grid-cols-2 lg:grid-cols-4']}>
+          {
+            how.map((item) => (
+              <li class="flex gap-3">
+                <span class="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-ink-2">
+                  <Icon name={item.icon} size={16} />
+                </span>
+                <span>
+                  <span class="block font-semibold">{item.title}</span>
+                  <span class="block text-sm text-ink-2">{item.body}</span>
+                </span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
   </div>
 </Base>
 
 <style is:global>
+  .filter-row {
+    display: grid;
+    gap: 0.5rem;
+  }
+  @media (min-width: 48rem) {
+    .filter-row {
+      grid-template-columns: 4.5rem minmax(0, 1fr);
+      align-items: start;
+    }
+    .filter-label {
+      padding-top: 0.5rem;
+    }
+  }
+  .filter-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .chip-count {
+    font-weight: 500;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+  }
   .continue-card {
-    margin-top: 1.25rem;
+    margin-top: 1.5rem;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: 'eyebrow cta' 'title cta' 'meta cta';
@@ -86,17 +286,18 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-rev
     align-items: center;
     padding: 1rem 1.125rem;
     border-radius: 0.875rem;
-    border: 1px solid var(--line);
-    background: var(--surface);
+    border: 1px solid var(--accent-stroke);
+    background: var(--accent-wash);
     color: var(--ink);
     text-decoration: none;
     transition: border-color 150ms var(--ease-out-quart);
   }
   .continue-card:hover {
-    border-color: var(--line-strong);
+    border-color: var(--ink-3);
   }
   .continue-card .eyebrow {
     grid-area: eyebrow;
+    color: var(--ink-2);
   }
   .continue-title {
     grid-area: title;
@@ -111,7 +312,7 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-rev
   .continue-meta {
     grid-area: meta;
     font-size: var(--text-sm);
-    color: var(--ink-3);
+    color: var(--ink-2);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

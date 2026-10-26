@@ -7,16 +7,18 @@ import Icon from './Icon.astro';
 interface Props {
   q: string;
   track?: TrackId;
+  subjectId?: number;
   page: number;
   hits: SearchHit[];
   total: number;
 }
-const { q, track, page, hits, total } = Astro.props;
+const { q, track, subjectId, page, hits, total } = Astro.props;
 const pages = Math.max(1, Math.ceil(total / SEARCH_PAGE_SIZE));
 const href = (params: { track?: string; page?: number }) => {
   const sp = new URLSearchParams({ q });
   const tr = 'track' in params ? params.track : track;
   if (tr) sp.set('track', tr);
+  if (subjectId && tr === track) sp.set('subject', String(subjectId));
   if (params.page && params.page > 1) sp.set('page', String(params.page));
   return `/search?${sp}`;
 };
@@ -127,34 +129,3 @@ const href = (params: { track?: string; page?: number }) => {
     )
   }
 </div>
-
-<style is:global>
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    min-height: 2.25rem;
-    padding: 0.25rem 0.875rem;
-    border-radius: 999px;
-    border: 1px solid var(--line-strong);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--ink-2);
-    white-space: nowrap;
-    text-decoration: none;
-    transition: background-color 150ms var(--ease-out-quart);
-  }
-  .chip:hover {
-    background: var(--surface-2);
-    color: var(--ink);
-  }
-  .chip[aria-current] {
-    background: var(--ink);
-    border-color: var(--ink);
-    color: var(--bg);
-  }
-  @media (pointer: coarse) {
-    .chip {
-      min-height: 2.75rem;
-    }
-  }
-</style>

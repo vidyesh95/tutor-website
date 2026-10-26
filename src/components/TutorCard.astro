@@ -1,0 +1,52 @@
+---
+import type { TutorProfile } from '../db/schema';
+import { t } from '../i18n';
+import Icon from './Icon.astro';
+
+interface Props {
+  tutor: TutorProfile;
+  /** compact: sidebar size, no bio. */
+  variant?: 'feature' | 'compact';
+}
+const { tutor, variant = 'feature' } = Astro.props;
+const photo = tutor.photoKey ? `/${tutor.photoKey}` : null;
+const initials = tutor.name
+  .split(/\s+/)
+  .filter((w) => /^\p{L}/u.test(w))
+  .slice(0, 2)
+  .map((w) => w[0])
+  .join('')
+  .toUpperCase();
+const firstParagraph = tutor.bio.split(/\n{2,}/)[0]?.trim() ?? '';
+const size = variant === 'feature' ? 'size-16 md:size-20 text-xl' : 'size-11 text-sm';
+---
+
+<div class:list={['flex gap-4', variant === 'compact' ? 'items-center' : 'items-start']}>
+  {
+    photo ? (
+      <img src={photo} alt="" width="160" height="160" loading="lazy" class:list={['shrink-0 rounded-full object-cover ring-1 ring-line', size]} />
+    ) : (
+      <span class:list={['grid shrink-0 place-items-center rounded-full bg-surface-2 font-bold text-ink-2 ring-1 ring-line', size]} aria-hidden="true">
+        {initials}
+      </span>
+    )
+  }
+  <div class="min-w-0">
+    {variant === 'compact' && <p class="eyebrow">{t('about.yourTutor')}</p>}
+    <p class:list={['font-bold', variant === 'feature' ? 'text-xl' : 'mt-0.5']}>{tutor.name}</p>
+    {tutor.headline && <p class="text-sm text-ink-2">{tutor.headline}</p>}
+    {
+      variant === 'feature' && firstParagraph && (
+        <p class="mt-3 max-w-[60ch] whitespace-pre-line text-ink-2">{firstParagraph}</p>
+      )
+    }
+    {
+      variant === 'feature' && (
+        <a href="/about" class="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-ink no-underline hover:underline hover:underline-offset-4">
+          {t('about.readMore', { name: tutor.name })}
+          <Icon name="arrow-right" size={16} />
+        </a>
+      )
+    }
+  </div>
+</div>

@@ -5,10 +5,13 @@ import Icon from './Icon.astro';
 interface Props {
   value?: string;
   track?: string;
+  subjectId?: number;
   autofocus?: boolean;
+  placeholder?: string;
+  compact?: boolean;
   id?: string;
 }
-const { value = '', track, autofocus = false, id = 'q' } = Astro.props;
+const { value = '', track, subjectId, autofocus = false, id = 'q', placeholder = t('search.placeholder'), compact = false } = Astro.props;
 ---
 
 <form action="/search" method="get" role="search" class="search-field flex gap-2" data-search-form>
@@ -23,11 +26,12 @@ const { value = '', track, autofocus = false, id = 'q' } = Astro.props;
       autocomplete="off"
       enterkeyhint="search"
       spellcheck="false"
-      placeholder={t('search.placeholder')}
+      placeholder={placeholder}
       autofocus={autofocus}
-      class="input min-h-13 rounded-xl pl-12 text-base shadow-[0_1px_0_var(--line)]"
+      class:list={['input rounded-xl pl-12 shadow-[0_1px_0_var(--line)]', compact ? 'min-h-11 text-sm' : 'min-h-13 text-base']}
     />
   </div>
   {track && <input type="hidden" name="track" value={track} />}
-  <button type="submit" class="btn min-h-13 rounded-xl px-5">{t('search.submit')}</button>
+  {subjectId && <input type="hidden" name="subject" value={subjectId} />}
+  {!compact && <button type="submit" class="btn min-h-13 rounded-xl px-5">{t('search.submit')}</button>}
 </form>

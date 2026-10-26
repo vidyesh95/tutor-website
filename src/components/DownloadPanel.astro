@@ -1,0 +1,75 @@
+---
+// "Download material": every PDF for a lesson. Rendered once under the video on phones and once in the
+// desktop sidebar (only one is ever displayed), so notes are never below the fold on mobile.
+import type { LessonFile } from '../db/schema';
+import { t } from '../i18n';
+import { fileUrl, formatBytes } from '../lib/files';
+import Icon from './Icon.astro';
+
+interface Props {
+  files: LessonFile[];
+  primaryFile: LessonFile | null;
+  playable: boolean;
+  id: string;
+}
+const { files: panelFiles, primaryFile, playable, id } = Astro.props;
+// One PDF beside a video: a single strong button says it all; the list stays for screen readers.
+const singleWithVideo = playable && panelFiles.length === 1;
+---
+
+{
+  panelFiles.length > 0 && (
+    <section class="panel p-5" aria-labelledby={`${id}-heading`}>
+      <div class="flex items-center gap-3">
+        <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-surface-2 text-ink-2">
+          <Icon name="download" size={20} />
+        </span>
+        <div>
+          <h2 id={`${id}-heading`} class="font-bold">
+            {t('lesson.downloadMaterial')}
+          </h2>
+          <p class="text-sm text-ink-3">{t('lesson.downloadLead')}</p>
+        </div>
+      </div>
+      <ul class:list={['mt-4 divide-y divide-line rounded-xl border border-line', singleWithVideo && 'sr-only']}>
+        {panelFiles.map((file) => {
+          const label = t(`fileKinds.${file.kind}`);
+          const size = formatBytes(file.sizeBytes);
+          const url = fileUrl(file.r2Key);
+          return (
+            <li class="flex items-center gap-3 px-3 py-2.5">
+              <Icon name="file" size={18} class="shrink-0 text-ink-3" />
+              <span class="min-w-0 flex-1">
+                <span class="block text-sm font-semibold">{label}</span>
+                <span class="print-url block text-xs text-ink-3" data-url={url}>
+                  PDF · {size}
+                </span>
+              </span>
+              <a href={url} target="_blank" rel="noopener" class="btn btn-quiet btn-sm px-2 no-print" aria-label={t('lesson.openAria', { label })}>
+                <Icon name="external" size={16} />
+              </a>
+              <a href={`${url}?download=1`} download class="btn btn-sm px-2.5 no-print" aria-label={t('lesson.downloadAria', { label, size })}>
+                <Icon name="download" size={16} />
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+      {singleWithVideo && primaryFile && (
+        <p class="mt-4 flex items-center justify-between gap-3 text-sm text-ink-3">
+          <span>{t(`fileKinds.${primaryFile.kind}`)} · PDF · {formatBytes(primaryFile.sizeBytes)}</span>
+          <a href={fileUrl(primaryFile.r2Key)} target="_blank" rel="noopener" class="flex items-center gap-1 font-semibold text-ink no-underline hover:underline">
+            {t('lesson.open')}
+            <Icon name="external" size={14} />
+          </a>
+        </p>
+      )}
+      {playable && primaryFile && (
+        <a href={`${fileUrl(primaryFile.r2Key)}?download=1`} download class:list={['btn btn-ink w-full no-print', singleWithVideo ? 'mt-3' : 'mt-4']}>
+          <Icon name="download" size={18} />
+          {t('lesson.downloadNamed', { label: t(`fileKinds.${primaryFile.kind}`).toLowerCase(), size: formatBytes(primaryFile.sizeBytes) })}
+        </a>
+      )}
+    </section>
+  )
+}

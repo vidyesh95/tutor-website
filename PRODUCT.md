@@ -24,7 +24,7 @@ Success: a student on a slow phone goes from landing to watching the right lectu
 
 ## Brand Personality
 
-Friendly, encouraging, clear. Feels like a good study app rather than a portal or a sales funnel: warm, a bit of color and character, never loud. Calm enough for a 1am revision session, approachable for a 15-year-old, credible for a senior engineer. No personal branding of the tutor; the library speaks.
+Friendly, encouraging, clear. Feels like a good study app rather than a portal or a sales funnel: warm, a bit of color and character, never loud. Calm enough for a 1am revision session, approachable for a 15-year-old, credible for a senior engineer. The tutor is present lightly (name, photo, short bio on the home and About pages, small card beside lessons); the library stays the star, with no marketing or sales voice.
 
 Reference lane: friendly study apps (Khan Academy, Brilliant) for warmth and encouragement, without their gamification.
 
@@ -32,7 +32,7 @@ Reference lane: friendly study apps (Khan Academy, Brilliant) for warmth and enc
 
 - **Coaching-class ads** (Byju's, Unacademy style): loud banners, toppers' photos, urgency, countdowns, sales popups.
 - **Generic SaaS landing**: hero + gradient + feature-card grid + testimonials.
-- **YouTube clone**: thumbnail wall, autoplay, recommendation feed, engagement bait.
+- **YouTube clone**: endless thumbnail wall, autoplay, recommendation feed, engagement bait. (A short, filterable "latest lessons" grid is fine.)
 - **Dated LMS** (Moodle, college portals): gray tables, tiny text, nested menus, login walls.
 
 ## Design Principles

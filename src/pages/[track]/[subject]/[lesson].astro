@@ -3,7 +3,7 @@ import Base from '../../../layouts/Base.astro';
 import LessonView from '../../../components/LessonView.astro';
 import NotFound from '../../../components/NotFound.astro';
 import { t, tn } from '../../../i18n';
-import { getCourse, getLessonDetail } from '../../../lib/queries';
+import { getCourse, getLessonDetail, getTutorProfile } from '../../../lib/queries';
 import { isTrackId } from '../../../lib/tracks';
 import { thumbnailUrl } from '../../../lib/youtube';
 
@@ -14,7 +14,7 @@ const course = await getCourse(track, subjectSlug);
 // A course with no public lessons is not public; the subject 404 handles that with context.
 if (!course) return Astro.rewrite(`/${track}/${subjectSlug}`);
 
-const found = await getLessonDetail({ subjectId: course.subject.id, slug: lessonSlug });
+const [found, tutor] = await Promise.all([getLessonDetail({ subjectId: course.subject.id, slug: lessonSlug }), getTutorProfile()]);
 const visible = found && found.detail.status === 'published' && !found.chapterArchived;
 if (!visible) Astro.response.status = 404;
 else Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
@@ -26,8 +26,8 @@ const ogImage = lesson?.youtubeId && lesson.videoStatus !== 'unavailable' ? thum
 
 {
   lesson ? (
-    <Base title={`${lesson.title} · ${course.subject.name}`} description={description} ogImage={ogImage} preconnectYouTube={!!lesson.youtubeId}>
-      <LessonView track={track} subject={course.subject} lesson={lesson} course={course} />
+    <Base current={track} title={`${lesson.title} · ${course.subject.name}`} description={description} ogImage={ogImage} preconnectYouTube={!!lesson.youtubeId}>
+      <LessonView track={track} subject={course.subject} lesson={lesson} course={course} tutor={tutor} />
     </Base>
   ) : (
     <Base title={t('notFound.lessonTitle')} noindex>

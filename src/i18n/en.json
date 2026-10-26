@@ -5,7 +5,19 @@
     "skip": "Skip to content",
     "themeToDark": "Switch to dark theme",
     "themeToLight": "Switch to light theme",
-    "footer": "Watch, download, revise. No account needed."
+    "footer": "Watch, download, revise. No account needed.",
+    "footerAbout": "Free video lessons and PDF notes, in order. For school students, engineering students and working engineers.",
+    "footerTracks": "Tracks",
+    "footerLibrary": "Library",
+    "tutorSignIn": "Tutor sign in",
+    "badge": "Free · No sign-up"
+  },
+  "about": {
+    "nav": "About",
+    "title": "About your tutor",
+    "teaches": "Teaches",
+    "yourTutor": "Your tutor",
+    "readMore": "More about {name}"
   },
   "search": {
     "label": "Search lessons",
@@ -36,7 +48,31 @@
     "chaptersOne": "1 chapter",
     "emptyTitle": "Lessons are on their way",
     "emptyBody": "The first courses are being prepared. Check back soon.",
-    "trackEmpty": "Coming soon"
+    "trackEmpty": "Coming soon",
+    "lead": "Video lectures with PDF notes, arranged chapter by chapter. Watch, download and revise without an account.",
+    "level": "Level",
+    "subject": "Subject",
+    "all": "All",
+    "latest": "Latest lessons",
+    "latestFiltered": "Latest in {filter}",
+    "showing": "Showing {shown} of {total}",
+    "browseTrack": "Browse all of {track}",
+    "noneForFilter": "No lessons match this filter yet.",
+    "clearFilter": "Show all lessons",
+    "watch": "Watch lesson",
+    "openLesson": "Open lesson",
+    "tracksTitle": "Browse by track",
+    "tracksLead": "Every course runs in order, chapter by chapter.",
+    "openTrack": "Open {track}",
+    "howTitle": "How this library works",
+    "how1Title": "Free, no account",
+    "how1Body": "Every video and PDF is open to everyone.",
+    "how2Title": "In order",
+    "how2Body": "Courses run chapter by chapter, so you always know what comes next.",
+    "how3Title": "Notes you can keep",
+    "how3Body": "Download PDFs to revise offline or print before a test.",
+    "how4Title": "Remembers your place",
+    "how4Body": "Progress is saved on this device only. Nothing is tracked."
   },
   "track": {
     "subjects": "Subjects",
@@ -50,7 +86,16 @@
     "done": "Done",
     "hasVideo": "Video",
     "hasNotes": "Notes",
-    "start": "Start with lesson 1"
+    "start": "Start with lesson 1",
+    "startShort": "Start",
+    "watch": "Watch",
+    "open": "Open",
+    "yourProgress": "Your progress",
+    "continueWith": "Continue",
+    "reviewLast": "Review",
+    "searchTitle": "Search this course",
+    "searchPlaceholder": "Topic or formula",
+    "lessonN": "Lesson {n}"
   },
   "lesson": {
     "chapterLesson": "Chapter {chapter} · Lesson {lesson}",
@@ -75,7 +120,17 @@
     "about": "About this lesson",
     "notesHero": "Notes for this lesson",
     "draftBanner": "Draft preview. Students can’t see this yet.",
-    "editLesson": "Edit lesson"
+    "editLesson": "Edit lesson",
+    "updated": "Updated {date}",
+    "downloadSized": "Download ({size})",
+    "downloadNamed": "Download {label} ({size})",
+    "downloadMaterial": "Download material",
+    "downloadLead": "Free PDFs. Keep them, print them.",
+    "share": "Share",
+    "linkCopied": "Link copied",
+    "nowPlaying": "Now playing",
+    "youAreHere": "You are here",
+    "allLessons": "All lessons"
   },
   "fileKinds": {
     "notes": "Notes",

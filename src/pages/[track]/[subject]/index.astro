@@ -5,26 +5,31 @@ import SubjectIndex from '../../../components/SubjectIndex.astro';
 import Breadcrumb from '../../../components/Breadcrumb.astro';
 import CourseMemory from '../../../components/CourseMemory.astro';
 import Icon from '../../../components/Icon.astro';
+import SearchField from '../../../components/SearchField.astro';
+import TutorCard from '../../../components/TutorCard.astro';
 import { t, tn } from '../../../i18n';
-import { getCourse, getLibraryIndex } from '../../../lib/queries';
+import { fileUrl, formatBytes } from '../../../lib/files';
+import { getCourse, getCourseNeighbours, getLibraryIndex, getTutorProfile } from '../../../lib/queries';
 import { isTrackId, TRACKS } from '../../../lib/tracks';
 
 const { track, subject: subjectSlug = '' } = Astro.params;
 if (!isTrackId(track)) return Astro.rewrite('/404');
 
-const course = await getCourse(track, subjectSlug);
+const [course, tutor] = await Promise.all([getCourse(track, subjectSlug), getTutorProfile()]);
 const siblings = course ? [] : ((await getLibraryIndex()).get(track) ?? []);
+const neighbours = course ? await getCourseNeighbours(track, subjectSlug) : null;
 if (!course) Astro.response.status = 404;
 else Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
 
 const trackLabel = TRACKS[track].label;
 const base = course ? `/${track}/${course.subject.slug}` : '';
-const firstLessonId = course?.chapters[0]?.lessons[0]?.id;
+const firstLesson = course?.chapters[0]?.lessons[0];
+const pad = (n: number) => String(n).padStart(2, '0');
 ---
 
 {
   !course ? (
-    <Base title={t('notFound.title')} noindex>
+    <Base title={t('notFound.title')} noindex current={track}>
       <NotFound body={t('notFound.subjectBody', { track: trackLabel })}>
         {siblings.length > 0 && (
           <div class="mt-10 max-w-3xl">
@@ -39,124 +44,242 @@ const firstLessonId = course?.chapters[0]?.lessons[0]?.id;
       title={`${course.subject.name} · ${trackLabel}`}
       description={`${trackLabel} ${course.subject.name}: ${course.lessonCount} lessons with video and notes, in order.`}
       ogImage={`/og/${track}.png`}
+      current={track}
     >
-      <div class="wrap pt-6 md:pt-10">
-        <Breadcrumb items={[{ label: trackLabel, href: `/${track}` }]} />
-        <div class="mt-3 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-          <div>
-            <h1 class="text-2xl font-bold tracking-tight md:text-3xl">{course.subject.name}</h1>
-            <p class="mt-1 text-ink-2">
-              {tn('home.chaptersOne', 'home.chapters', course.chapters.length)} ·{' '}
-              {tn('home.lessonsOne', 'home.lessons', course.lessonCount)}
-            </p>
+      <div class="wrap pt-5 md:pt-8">
+        <Breadcrumb items={[{ label: t('site.name'), href: '/' }, { label: trackLabel, href: `/${track}` }]} />
+
+        <header class="mt-4 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+          <div class="min-w-0">
+            {neighbours && neighbours.sameSubject.length > 1 && (
+              <nav aria-label={`${course.subject.name} in other tracks`} class="segmented mb-4">
+                {neighbours.sameSubject.map((s) => (
+                  <a href={`/${s.track}/${s.slug}`} aria-current={s.track === track ? 'page' : undefined}>
+                    {TRACKS[s.track].label}
+                  </a>
+                ))}
+              </nav>
+            )}
+            <h1 class="text-2xl font-bold tracking-tight md:text-3xl">
+              {trackLabel} {course.subject.name}
+            </h1>
+            <ul class="mt-3 flex flex-wrap gap-2">
+              <li class="chip-static">{tn('home.chaptersOne', 'home.chapters', course.chapters.length)}</li>
+              <li class="chip-static">{tn('home.lessonsOne', 'home.lessons', course.lessonCount)}</li>
+              {course.fileCount > 0 && <li class="chip-static">{course.fileCount === 1 ? '1 PDF' : `${course.fileCount} PDFs`}</li>}
+            </ul>
           </div>
-          <div id="course-progress" class="w-full max-w-xs" hidden>
-            <p class="text-sm font-semibold" data-progress-text />
+          {neighbours && neighbours.sameTrack.length > 1 && (
+            <nav aria-label={`Other ${trackLabel} subjects`} class="flex flex-wrap gap-2">
+              {neighbours.sameTrack.map((s) => (
+                <a href={`/${s.track}/${s.slug}`} class="chip" aria-current={s.slug === course.subject.slug ? 'true' : undefined}>
+                  {s.name}
+                </a>
+              ))}
+            </nav>
+          )}
+        </header>
+
+        <!-- Phones: progress and Continue up front; the sidebar version sits below the chapters there. -->
+        <section class="panel mt-6 flex items-center gap-4 p-4 lg:hidden" aria-label={t('course.yourProgress')}>
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-bold tabular-nums" data-progress-text data-template={t('course.progress')}>
+              {t('course.progress', { done: 0, total: course.lessonCount })}
+            </p>
             <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
               <div class="progress-fill h-full origin-left rounded-full bg-accent" />
             </div>
           </div>
-        </div>
+          <a href={firstLesson ? `${base}/${firstLesson.slug}` : base} class="btn btn-primary btn-sm shrink-0" data-resume data-short>
+            <span data-resume-label>{t('course.startShort')}</span>
+            <Icon name="arrow-right" size={16} />
+          </a>
+        </section>
 
-        <ol class="mt-8 max-w-3xl border-t border-line" id="chapters">
-          {course.chapters.map((chapter, ci) => (
-            <li class="border-b border-line" data-chapter={chapter.id}>
-              <details open={ci === 0} class="chapter group/ch">
-                <summary class="flex min-h-16 cursor-pointer list-none items-center gap-4 py-4 select-none">
-                  <span class="min-w-0 flex-1">
-                    <span class="eyebrow block">{t('course.chapter', { n: chapter.number })}</span>
-                    <span class="mt-0.5 block text-lg leading-snug font-bold">{chapter.name}</span>
-                  </span>
-                  <span class="chapter-done done-mark" aria-hidden="true">
-                    <Icon name="check" />
-                  </span>
-                  <span class="shrink-0 text-sm text-ink-3 tabular-nums" data-chapter-count data-total={chapter.lessons.length}>
-                    {tn('home.lessonsOne', 'home.lessons', chapter.lessons.length)}
-                  </span>
-                  <Icon
-                    name="chevron-down"
-                    size={18}
-                    class="shrink-0 text-ink-3 transition-transform duration-200 group-open/ch:rotate-180"
-                  />
-                </summary>
-                <ol class="pb-4">
-                  {chapter.lessons.map((lesson) => (
-                    <li data-lesson-id={lesson.id} data-next={lesson.id === firstLessonId ? '' : undefined}>
-                      <a
-                        href={`${base}/${lesson.slug}`}
-                        class="lesson-row flex min-h-12 items-center gap-3 rounded-lg py-2.5 text-ink no-underline transition-colors duration-150 hover:bg-surface md:-mx-3 md:px-3"
+        <div class="mt-6 grid gap-6 lg:mt-8 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8">
+          <ol class="grid content-start gap-4" id="chapters" aria-label="Chapters">
+            {course.chapters.map((chapter, ci) => (
+              <li class="panel overflow-hidden" data-chapter={chapter.id}>
+                <details open={ci === 0} class="chapter group/ch">
+                  <summary class="flex cursor-pointer list-none gap-4 p-4 select-none md:p-5">
+                    <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-surface-2 text-sm font-bold text-ink-2 tabular-nums md:size-12 md:text-base">
+                      {pad(chapter.number)}
+                    </span>
+                    <span class="min-w-0 flex-1">
+                      <span class="flex flex-wrap items-center gap-2">
+                        <span class="eyebrow">{t('course.chapter', { n: chapter.number })}</span>
+                        <span class="chapter-status chip-static tabular-nums" data-total={chapter.lessons.length}>
+                          <span class="chapter-done done-mark" aria-hidden="true">
+                            <Icon name="check" />
+                          </span>
+                          <span data-chapter-count>{tn('home.lessonsOne', 'home.lessons', chapter.lessons.length)}</span>
+                        </span>
+                      </span>
+                      <span class="mt-1 block text-lg leading-snug font-bold">{chapter.name}</span>
+                      <span class="mt-3 flex flex-wrap gap-1.5 group-open/ch:hidden">
+                        {chapter.lessons.slice(0, 3).map((l) => (
+                          <span class="chip-static max-w-full font-medium">
+                            <span class="truncate">
+                              {l.number}. {l.title}
+                            </span>
+                          </span>
+                        ))}
+                        {chapter.lessons.length > 3 && <span class="chip-static font-medium">+{chapter.lessons.length - 3} more</span>}
+                      </span>
+                    </span>
+                    <Icon name="chevron-down" size={20} class="mt-2 shrink-0 text-ink-3 transition-transform duration-200 group-open/ch:rotate-180" />
+                  </summary>
+                  <ol class="border-t border-line">
+                    {chapter.lessons.map((lesson) => (
+                      <li
+                        class="lesson-row relative flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-3 last:border-b-0 md:flex-nowrap md:px-5"
+                        data-lesson-id={lesson.id}
+                        data-next={lesson.id === firstLesson?.id ? '' : undefined}
                       >
-                        <span class="w-6 shrink-0 text-right text-sm text-ink-3 tabular-nums">{lesson.number}</span>
-                        <span class="min-w-0 flex-1">
-                          <span class="swipe rounded-sm leading-snug">{lesson.title}</span>
-                          <span class="next-label ml-2 align-[0.1em] text-xs font-semibold text-ink-2">{t('course.upNext')}</span>
-                        </span>
-                        <span class="flex shrink-0 items-center gap-1.5 text-ink-3">
-                          {lesson.hasVideo && <Icon name="video" size={16} label={t('course.hasVideo')} />}
-                          {lesson.kinds.length > 0 && <Icon name="file" size={16} label={t('course.hasNotes')} />}
-                        </span>
                         <span class="done-mark" aria-hidden="true" data-label={t('course.done')}>
                           <Icon name="check" />
                         </span>
-                      </a>
-                    </li>
-                  ))}
-                </ol>
-              </details>
-            </li>
-          ))}
-        </ol>
+                        <span class="w-6 shrink-0 text-sm text-ink-3 tabular-nums">{pad(lesson.number)}</span>
+                        <span class="min-w-0 flex-1 basis-48">
+                          <a href={`${base}/${lesson.slug}`} class="lesson-link font-semibold text-ink no-underline">
+                            <span class="swipe rounded-sm leading-snug">{lesson.title}</span>
+                          </a>
+                          <span class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-3">
+                            <span class="next-label font-semibold text-ink-2">{t('course.upNext')}</span>
+                            {lesson.hasVideo && (
+                              <span class="flex items-center gap-1">
+                                <Icon name="video" size={13} />
+                                {t('course.hasVideo')}
+                              </span>
+                            )}
+                            {lesson.kinds.length > 0 && (
+                              <span class="flex items-center gap-1">
+                                <Icon name="file" size={13} />
+                                {lesson.kinds.map((k) => t(`fileKinds.${k}`)).join(', ')}
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                        <span class="row-actions ml-auto flex shrink-0 items-center gap-2">
+                          {lesson.primaryFile && (
+                            <a
+                              href={`${fileUrl(lesson.primaryFile.r2Key)}?download=1`}
+                              download
+                              class="btn btn-quiet btn-sm"
+                              aria-label={t('lesson.downloadAria', {
+                                label: `${t(`fileKinds.${lesson.primaryFile.kind}`)}: ${lesson.title}`,
+                                size: formatBytes(lesson.primaryFile.sizeBytes),
+                              })}
+                            >
+                              <Icon name="download" size={16} />
+                              PDF <span class="font-normal text-ink-3">{formatBytes(lesson.primaryFile.sizeBytes)}</span>
+                            </a>
+                          )}
+                          <a href={`${base}/${lesson.slug}`} class="btn btn-sm watch-btn" tabindex="-1" aria-hidden="true">
+                            {lesson.hasVideo ? t('course.watch') : t('course.open')}
+                          </a>
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+              </li>
+            ))}
+          </ol>
+
+          <aside class="grid content-start gap-4 lg:sticky lg:top-6 lg:self-start">
+            <section class="panel hidden p-5 lg:block" aria-labelledby="progress-title">
+              <h2 id="progress-title" class="eyebrow">
+                {t('course.yourProgress')}
+              </h2>
+              <p class="mt-2 text-lg font-bold tabular-nums" data-progress-text data-template={t('course.progress')}>
+                {t('course.progress', { done: 0, total: course.lessonCount })}
+              </p>
+              <div class="mt-2 h-2 overflow-hidden rounded-full bg-surface-2" aria-hidden="true">
+                <div class="progress-fill h-full origin-left rounded-full bg-accent" />
+              </div>
+              <a href={firstLesson ? `${base}/${firstLesson.slug}` : base} class="btn btn-primary mt-4 w-full justify-between" data-resume>
+                <span class="truncate" data-resume-label>
+                  {t('course.start')}
+                </span>
+                <Icon name="arrow-right" size={18} class="shrink-0" />
+              </a>
+              <p class="mt-2 text-xs text-ink-3">{t('home.how4Body')}</p>
+            </section>
+
+            <section class="panel p-5" aria-labelledby="course-search-title">
+              <h2 id="course-search-title" class="eyebrow">
+                {t('course.searchTitle')}
+              </h2>
+              <div class="mt-3">
+                <SearchField id="course-q" track={track} subjectId={course.subject.id} placeholder={t('course.searchPlaceholder')} compact />
+              </div>
+            </section>
+
+            {tutor && (
+              <section class="panel p-5">
+                <TutorCard tutor={tutor} variant="compact" />
+              </section>
+            )}
+          </aside>
+        </div>
       </div>
 
       <CourseMemory course={course} />
       <script
         is:inline
-        define:vars={{ subjectId: course.subject.id, total: course.lessonCount, progressCopy: t('course.progress'), chapterCopy: t('course.progress') }}
+        define:vars={{
+          subjectId: course.subject.id,
+          total: course.lessonCount,
+          chapterCopy: t('course.progress'),
+          continueCopy: t('course.continueWith'),
+          reviewCopy: t('course.reviewLast'),
+        }}
       >
         (function () {
           var done = TL.done();
           var course = TL.read('tl:courses', {})[subjectId];
-          var rows = document.querySelectorAll('#chapters [data-lesson-id]');
           var doneCount = 0;
-          rows.forEach(function (row) {
-            var id = Number(row.dataset.lessonId);
+          document.querySelectorAll('#chapters [data-lesson-id]').forEach(function (row) {
+            if (!done.has(Number(row.dataset.lessonId))) return;
+            row.setAttribute('data-done', '');
+            // Announce "Done" only where it applies; the empty circle stays decorative.
             var mark = row.querySelector('.done-mark');
-            if (done.has(id)) {
-              row.setAttribute('data-done', '');
-              // Announce "Done" only where it applies; the empty circle stays decorative.
-              mark.removeAttribute('aria-hidden');
-              mark.setAttribute('role', 'img');
-              mark.setAttribute('aria-label', mark.dataset.label);
-              doneCount++;
-            }
+            mark.removeAttribute('aria-hidden');
+            mark.setAttribute('role', 'img');
+            mark.setAttribute('aria-label', mark.dataset.label);
+            doneCount++;
           });
           document.querySelectorAll('[data-chapter]').forEach(function (ch) {
             var n = ch.querySelectorAll('[data-done]').length;
-            var count = ch.querySelector('[data-chapter-count]');
-            if (n) count.textContent = chapterCopy.replace('{done}', n).replace('{total}', count.dataset.total);
-            if (n && n === Number(count.dataset.total)) ch.setAttribute('data-complete', '');
+            var status = ch.querySelector('.chapter-status');
+            var inChapter = Number(status.dataset.total);
+            if (n) status.querySelector('[data-chapter-count]').textContent = chapterCopy.replace('{done}', n).replace('{total}', inChapter);
+            if (n && n === inChapter) ch.setAttribute('data-complete', '');
           });
-          if (doneCount) {
-            var box = document.getElementById('course-progress');
-            box.hidden = false;
-            box.querySelector('[data-progress-text]').textContent = progressCopy.replace('{done}', doneCount).replace('{total}', total);
-            box.querySelector('.progress-fill').style.transform = 'scaleX(' + doneCount / total + ')';
+          document.querySelectorAll('[data-progress-text]').forEach(function (text) {
+            text.textContent = text.dataset.template.replace('{done}', doneCount).replace('{total}', total);
+          });
+          document.querySelectorAll('.progress-fill').forEach(function (fill) {
+            fill.style.transform = 'scaleX(' + doneCount / total + ')';
+          });
+
+          // Highlight the resume lesson, open only its chapter, and point the sidebar button at it.
+          var r = course && course.lessons ? TL.resume(course, done) : null;
+          if (!r && doneCount === total) r = { complete: true };
+          if (!r) return;
+          document.querySelectorAll('[data-next]').forEach(function (el) { el.removeAttribute('data-next'); });
+          var target = r.lesson && document.querySelector('#chapters [data-lesson-id="' + r.lesson[0] + '"]');
+          if (target && !r.complete) {
+            target.setAttribute('data-next', '');
+            document.querySelectorAll('#chapters details').forEach(function (d) { d.open = d.contains(target); });
           }
-          // Highlight the resume lesson and open only its chapter.
-          if (course && course.lessons) {
-            var r = TL.resume(course, done);
-            var target = r && !r.complete && document.querySelector('[data-lesson-id="' + r.lesson[0] + '"]');
-            if (target) {
-              document.querySelectorAll('[data-next]').forEach(function (el) { el.removeAttribute('data-next'); });
-              target.setAttribute('data-next', '');
-              document.querySelectorAll('#chapters details').forEach(function (d) {
-                d.open = d.contains(target);
-              });
-            } else if (r && r.complete) {
-              document.querySelectorAll('[data-next]').forEach(function (el) { el.removeAttribute('data-next'); });
-            }
-          } else if (doneCount === total) {
-            document.querySelectorAll('[data-next]').forEach(function (el) { el.removeAttribute('data-next'); });
+          if (r.lesson) {
+            document.querySelectorAll('[data-resume]').forEach(function (btn) {
+              btn.href = r.lesson[2];
+              var verb = r.complete ? reviewCopy : continueCopy;
+              btn.querySelector('[data-resume-label]').textContent = 'short' in btn.dataset ? verb : verb + ': ' + r.lesson[1];
+            });
           }
         })();
       </script>
@@ -168,27 +291,83 @@ const firstLessonId = course?.chapters[0]?.lessons[0]?.id;
   summary::-webkit-details-marker {
     display: none;
   }
+  .segmented {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border-radius: 0.75rem;
+    background: var(--surface-2);
+  }
+  .segmented a {
+    padding: 0.375rem 0.875rem;
+    border-radius: 0.5rem;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink-2);
+    text-decoration: none;
+  }
+  .segmented a:hover {
+    color: var(--ink);
+  }
+  .segmented a[aria-current='page'] {
+    background: var(--bg);
+    color: var(--ink);
+    box-shadow: var(--shadow-panel);
+  }
   .next-label {
     display: none;
   }
   [data-next] .next-label {
     display: inline;
   }
-  [data-next] .lesson-row {
-    font-weight: 600;
+  .lesson-row {
+    transition: background-color 150ms var(--ease-out-quart);
+  }
+  .lesson-row:hover {
+    background: var(--surface);
+  }
+  .lesson-row[data-next] {
+    background: var(--accent-wash);
+  }
+  /* The sidebar Continue button is the one amber action; the row button stays strong but neutral. */
+  [data-next] .watch-btn {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--bg);
+  }
+  .lesson-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+  .row-actions {
+    position: relative;
+    z-index: 1;
+  }
+  @media (max-width: 47.99rem) {
+    /* On phones the actions sit under the title, aligned with it. */
+    .row-actions {
+      width: 100%;
+      padding-left: 4.25rem;
+      margin-left: 0;
+    }
   }
   .chapter-done {
     display: none;
+    width: 1rem;
+    height: 1rem;
   }
-  [data-complete] > details > summary .chapter-done {
+  [data-complete] .chapter-done {
     display: inline-grid;
     background: var(--accent);
     border-color: var(--accent-stroke);
     color: var(--accent-ink);
   }
-  [data-complete] > details > summary .chapter-done :global(svg) {
+  [data-complete] .chapter-done :global(svg) {
     transform: none;
     opacity: 1;
+    width: 0.625rem;
+    height: 0.625rem;
   }
   .progress-fill {
     transform: scaleX(0);

@@ -1,0 +1,121 @@
+---
+import { actions, isInputError } from 'astro:actions';
+import Admin from '../../layouts/Admin.astro';
+import Icon from '../../components/Icon.astro';
+import TutorCard from '../../components/TutorCard.astro';
+import { getDb } from '../../lib/db';
+import { tutorProfile } from '../../db/schema';
+import { eq } from 'drizzle-orm';
+
+const result = Astro.getActionResult(actions.saveTutorProfile);
+if (result?.data) return Astro.redirect(`/admin/profile?msg=${encodeURIComponent(result.data.message)}`);
+const fieldErrors = isInputError(result?.error) ? result.error.fields : {};
+const formError = result?.error && !isInputError(result.error) ? result.error.message : undefined;
+
+const [profile] = await getDb().select().from(tutorProfile).where(eq(tutorProfile.id, 1));
+const message = Astro.url.searchParams.get('msg');
+const err = (name: string) => (fieldErrors as Record<string, string[] | undefined>)[name]?.[0];
+---
+
+<Admin title="Tutor profile" current="profile">
+  <h1 class="text-2xl font-bold tracking-tight">Tutor profile</h1>
+  <p class="mt-1 max-w-2xl text-ink-2">Shown on the home page, the About page, and beside lessons. Leave the name empty to hide it everywhere.</p>
+
+  {message && <p class="notice notice-success mt-6 max-w-3xl" role="status"><Icon name="check" class="mt-0.5 shrink-0" />{message}</p>}
+  {formError && <p class="notice notice-error mt-6 max-w-3xl" role="alert"><Icon name="alert" class="mt-0.5 shrink-0" />{formError}</p>}
+
+  <div class="mt-8 grid max-w-5xl gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <form method="POST" action={actions.saveTutorProfile} enctype="multipart/form-data" class="profile-form grid gap-5">
+      <div class="field">
+        <label for="name" class="label">Name</label>
+        <input id="name" name="name" value={profile?.name} maxlength="80" class="input" placeholder="e.g. Asha Kulkarni" aria-invalid={err('name') ? 'true' : undefined} />
+        {err('name') && <p class="error-text">{err('name')}</p>}
+      </div>
+      <div class="field">
+        <label for="headline" class="label">Headline <span class="font-normal text-ink-3">(optional)</span></label>
+        <input id="headline" name="headline" value={profile?.headline} maxlength="120" class="input" placeholder="e.g. Maths and Computer Science, 12 years of teaching" />
+        {err('headline') && <p class="error-text">{err('headline')}</p>}
+      </div>
+      <div class="field">
+        <label for="bio" class="label">About you <span class="font-normal text-ink-3">(optional)</span></label>
+        <textarea id="bio" name="bio" rows="7" maxlength="2000" class="input" aria-describedby="bio-hint">{profile?.bio}</textarea>
+        <p id="bio-hint" class="hint">The first paragraph appears on the home page. Blank lines start new paragraphs.</p>
+        {err('bio') && <p class="error-text">{err('bio')}</p>}
+      </div>
+      <div class="field">
+        <span class="label">Photo <span class="font-normal text-ink-3">(optional)</span></span>
+        <div class="flex flex-wrap items-center gap-4">
+          {
+            profile?.photoKey ? (
+              <img src={`/${profile.photoKey}`} alt="Current photo" width="72" height="72" class="size-18 rounded-full object-cover ring-1 ring-line" data-photo-preview />
+            ) : (
+              <span class="grid size-18 place-items-center rounded-full bg-surface-2 text-ink-3 ring-1 ring-line" data-photo-placeholder>
+                <Icon name="upload" />
+              </span>
+            )
+          }
+          <img alt="New photo preview" width="72" height="72" class="size-18 rounded-full object-cover ring-1 ring-line" data-photo-new hidden />
+          <div class="grid gap-2">
+            <input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" class="text-sm file:mr-3 file:cursor-pointer file:rounded-ui file:border file:border-line-strong file:bg-bg file:px-3 file:py-1.5 file:font-semibold file:text-ink" />
+            {
+              profile?.photoKey && (
+                <label class="flex items-center gap-2 text-sm">
+                  <input type="checkbox" name="removePhoto" value="true" class="size-4" />
+                  Remove current photo
+                </label>
+              )
+            }
+          </div>
+        </div>
+        <p class="hint">A square photo works best. It's resized on your device before upload, so large phone photos are fine.</p>
+      </div>
+      <div>
+        <button type="submit" class="btn btn-primary">Save profile</button>
+      </div>
+    </form>
+
+    {
+      profile?.name && (
+        <aside>
+          <p class="eyebrow">Preview</p>
+          <div class="panel mt-3 p-5">
+            <TutorCard tutor={profile} variant="compact" />
+          </div>
+          <a href="/about" target="_blank" class="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-ink no-underline hover:underline">
+            View About page
+            <Icon name="external" size={14} />
+          </a>
+        </aside>
+      )
+    }
+  </div>
+</Admin>
+
+<script>
+  // Crop to a 480px square WebP in the browser so uploads are small even on mobile data.
+  const input = document.querySelector<HTMLInputElement>('#photo');
+  const preview = document.querySelector<HTMLImageElement>('[data-photo-new]');
+  input?.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file || !preview) return;
+    try {
+      const bitmap = await createImageBitmap(file);
+      const side = Math.min(bitmap.width, bitmap.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = Math.min(480, side);
+      canvas
+        .getContext('2d')!
+        .drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', 0.85));
+      if (!blob) return;
+      const resized = new File([blob], 'photo.webp', { type: 'image/webp' });
+      const transfer = new DataTransfer();
+      transfer.items.add(resized);
+      input.files = transfer.files;
+      preview.src = URL.createObjectURL(blob);
+      preview.hidden = false;
+    } catch {
+      // Unsupported format for decoding: upload the original and let the server validate it.
+    }
+  });
+</script>

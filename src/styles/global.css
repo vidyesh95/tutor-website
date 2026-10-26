@@ -11,10 +11,12 @@
   color-scheme: light;
   --hue: 85;
 
-  --bg: oklch(0.985 0.004 var(--hue));
-  --surface: oklch(0.965 0.006 var(--hue));
-  --surface-2: oklch(0.935 0.007 var(--hue));
-  --line: oklch(0.895 0.008 var(--hue));
+  /* canvas = page; bg = raised panels and inputs; surface = tints inside panels */
+  --canvas: oklch(0.962 0.006 var(--hue));
+  --bg: oklch(0.994 0.003 var(--hue));
+  --surface: oklch(0.972 0.005 var(--hue));
+  --surface-2: oklch(0.942 0.007 var(--hue));
+  --line: oklch(0.905 0.008 var(--hue));
   --line-strong: oklch(0.79 0.01 var(--hue));
   --ink: oklch(0.24 0.012 var(--hue));
   --ink-2: oklch(0.42 0.012 var(--hue));
@@ -32,14 +34,16 @@
   --warn-wash: oklch(0.96 0.03 75);
 
   --shadow-sticky: 0 -1px 0 var(--line), 0 -8px 24px oklch(0.24 0.012 var(--hue) / 0.06);
+  --shadow-panel: 0 1px 2px oklch(0.24 0.012 var(--hue) / 0.04), 0 4px 16px -8px oklch(0.24 0.012 var(--hue) / 0.08);
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: oklch(0.19 0.008 var(--hue));
-  --surface: oklch(0.225 0.009 var(--hue));
-  --surface-2: oklch(0.265 0.01 var(--hue));
-  --line: oklch(0.315 0.01 var(--hue));
+  --canvas: oklch(0.165 0.007 var(--hue));
+  --bg: oklch(0.205 0.008 var(--hue));
+  --surface: oklch(0.235 0.009 var(--hue));
+  --surface-2: oklch(0.27 0.01 var(--hue));
+  --line: oklch(0.31 0.01 var(--hue));
   --line-strong: oklch(0.43 0.012 var(--hue));
   --ink: oklch(0.93 0.008 var(--hue));
   --ink-2: oklch(0.8 0.01 var(--hue));
@@ -57,15 +61,17 @@
   --warn-wash: oklch(0.28 0.04 75);
 
   --shadow-sticky: 0 -1px 0 var(--line);
+  --shadow-panel: 0 0 0 1px oklch(0.31 0.01 var(--hue) / 0.4);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: oklch(0.19 0.008 var(--hue));
-    --surface: oklch(0.225 0.009 var(--hue));
-    --surface-2: oklch(0.265 0.01 var(--hue));
-    --line: oklch(0.315 0.01 var(--hue));
+    --canvas: oklch(0.165 0.007 var(--hue));
+    --bg: oklch(0.205 0.008 var(--hue));
+    --surface: oklch(0.235 0.009 var(--hue));
+    --surface-2: oklch(0.27 0.01 var(--hue));
+    --line: oklch(0.31 0.01 var(--hue));
     --line-strong: oklch(0.43 0.012 var(--hue));
     --ink: oklch(0.93 0.008 var(--hue));
     --ink-2: oklch(0.8 0.01 var(--hue));
@@ -83,6 +89,7 @@
     --warn-wash: oklch(0.28 0.04 75);
 
     --shadow-sticky: 0 -1px 0 var(--line);
+    --shadow-panel: 0 0 0 1px oklch(0.31 0.01 var(--hue) / 0.4);
   }
 }
 
@@ -90,6 +97,7 @@
   /* One token for the family: swapping to system-ui is a one-line change. */
   --font-sans: var(--font-atkinson, system-ui), system-ui, sans-serif;
 
+  --color-canvas: var(--canvas);
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -137,7 +145,7 @@
     text-size-adjust: 100%;
   }
   body {
-    background: var(--bg);
+    background: var(--canvas);
     color: var(--ink);
     font-family: var(--font-sans);
     font-kerning: normal;
@@ -182,6 +190,55 @@
 }
 
 @layer components {
+  /* Raised panel: the one container shape on student pages. Never nested. */
+  .panel {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-panel);
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.25rem;
+    padding: 0.25rem 0.875rem;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink-2);
+    white-space: nowrap;
+    text-decoration: none;
+    transition: background-color 150ms var(--ease-out-quart);
+  }
+  .chip:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .chip[aria-current] {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--bg);
+  }
+  @media (pointer: coarse) {
+    .chip {
+      min-height: 2.75rem;
+    }
+  }
+  .chip-static {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 1.625rem;
+    padding: 0.125rem 0.625rem;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--ink-2);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    white-space: nowrap;
+  }
   .wrap {
     width: 100%;
     max-width: 72rem;
@@ -248,6 +305,16 @@
   }
   .btn-primary:active {
     background: var(--accent-press);
+  }
+  /* Strong neutral: next steps and secondary downloads, so amber stays rare. */
+  .btn-ink {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--bg);
+  }
+  .btn-ink:hover {
+    background: var(--ink-2);
+    border-color: var(--ink-2);
   }
   .btn-quiet {
     border-color: transparent;
