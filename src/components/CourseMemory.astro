@@ -1,7 +1,6 @@
 ---
 // Writes the course outline into device memory so home can offer "continue" without a request.
 import type { Course } from '../lib/queries';
-import { TRACKS } from '../lib/tracks';
 
 interface Props {
   course: Course;
@@ -13,7 +12,7 @@ const base = `/${course.subject.track}/${course.subject.slug}`;
 const record = {
   id: course.subject.id,
   name: course.subject.name,
-  track: TRACKS[course.subject.track].label,
+  track: course.subject.trackLabel,
   url: base,
   lessons: course.chapters.flatMap((c) => c.lessons.map((l) => [l.id, l.title, `${base}/${l.slug}`])),
 };

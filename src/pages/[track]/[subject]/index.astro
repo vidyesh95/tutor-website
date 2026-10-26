@@ -10,10 +10,13 @@ import TutorCard from '../../../components/TutorCard.astro';
 import { t, tn } from '../../../i18n';
 import { fileUrl, formatBytes } from '../../../lib/files';
 import { getCourse, getCourseNeighbours, getLibraryIndex, getTutorProfile } from '../../../lib/queries';
-import { isTrackId, TRACKS } from '../../../lib/tracks';
+import { getPublicTrack } from '../../../lib/track-queries';
+import { trackOgImage } from '../../../lib/tracks';
 
-const { track, subject: subjectSlug = '' } = Astro.params;
-if (!isTrackId(track)) return Astro.rewrite('/404');
+const { track: trackParam, subject: subjectSlug = '' } = Astro.params;
+const trackRow = await getPublicTrack(trackParam);
+if (!trackRow) return Astro.rewrite('/404');
+const track = trackRow.slug;
 
 const [course, tutor] = await Promise.all([getCourse(track, subjectSlug), getTutorProfile()]);
 const siblings = course ? [] : ((await getLibraryIndex()).get(track) ?? []);
@@ -21,7 +24,7 @@ const neighbours = course ? await getCourseNeighbours(track, subjectSlug) : null
 if (!course) Astro.response.status = 404;
 else Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
 
-const trackLabel = TRACKS[track].label;
+const trackLabel = trackRow.label;
 const base = course ? `/${track}/${course.subject.slug}` : '';
 const firstLesson = course?.chapters[0]?.lessons[0];
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -43,7 +46,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
     <Base
       title={`${course.subject.name} · ${trackLabel}`}
       description={`${trackLabel} ${course.subject.name}: ${course.lessonCount} lessons with video and notes, in order.`}
-      ogImage={`/og/${track}.png`}
+      ogImage={trackOgImage(track)}
       current={track}
     >
       <div class="wrap pt-5 md:pt-8">
@@ -55,7 +58,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
               <nav aria-label={`${course.subject.name} in other tracks`} class="segmented mb-4">
                 {neighbours.sameSubject.map((s) => (
                   <a href={`/${s.track}/${s.slug}`} aria-current={s.track === track ? 'page' : undefined}>
-                    {TRACKS[s.track].label}
+                    {s.trackLabel}
                   </a>
                 ))}
               </nav>

@@ -3,19 +3,19 @@ import Admin from '../../layouts/Admin.astro';
 import Icon from '../../components/Icon.astro';
 import { t } from '../../i18n';
 import { getStructure, listLessons } from '../../lib/admin-queries';
-import { isTrackId, TRACKS, TRACK_IDS } from '../../lib/tracks';
 
 const sp = Astro.url.searchParams;
 const trackParam = sp.get('track') ?? undefined;
+const structure = await getStructure();
 const filters = {
-  track: isTrackId(trackParam) ? trackParam : undefined,
+  track: structure.find((g) => g.track === trackParam)?.track,
   subjectId: Number(sp.get('subject')) || undefined,
   status: sp.get('status') === 'draft' || sp.get('status') === 'published' ? (sp.get('status') as 'draft' | 'published') : undefined,
   q: sp.get('q')?.trim() || undefined,
 };
 const filtered = Object.values(filters).some(Boolean);
 
-const [rows, structure] = await Promise.all([listLessons(filters), getStructure()]);
+const rows = await listLessons(filters);
 const hasSubjects = structure.some((t) => t.subjects.length);
 const deleted = sp.get('deleted');
 
@@ -54,9 +54,9 @@ const formatDate = (sqlTime: string) =>
             <label for="f-track" class="label">Track</label>
             <select id="f-track" name="track" class="input">
               <option value="">All tracks</option>
-              {TRACK_IDS.map((id) => (
-                <option value={id} selected={filters.track === id}>
-                  {TRACKS[id].label}
+              {structure.map((group) => (
+                <option value={group.track} selected={filters.track === group.track}>
+                  {group.label}
                 </option>
               ))}
             </select>
@@ -67,7 +67,7 @@ const formatDate = (sqlTime: string) =>
               <option value="">All subjects</option>
               {structure.map((group) =>
                 group.subjects.length ? (
-                  <optgroup label={TRACKS[group.track].label}>
+                  <optgroup label={group.label}>
                     {group.subjects.map((s) => (
                       <option value={s.id} selected={filters.subjectId === s.id}>
                         {s.name}
@@ -132,7 +132,7 @@ const formatDate = (sqlTime: string) =>
                       </a>
                     </td>
                     <td data-cell="course" class="text-ink-2">
-                      {TRACKS[row.track].label} · {row.subjectName} · {row.chapterName}
+                      {row.trackLabel} · {row.subjectName} · {row.chapterName}
                       {(row.subjectArchived || row.chapterArchived) && <span class="ml-1 text-ink-3">(archived)</span>}
                     </td>
                     <td data-cell="status">

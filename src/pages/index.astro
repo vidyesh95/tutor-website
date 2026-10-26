@@ -6,13 +6,14 @@ import SearchField from '../components/SearchField.astro';
 import TutorCard from '../components/TutorCard.astro';
 import { t, tn } from '../i18n';
 import { getLatestLessons, getLibraryIndex, getSubjectNames, getTutorProfile } from '../lib/queries';
-import { isTrackId, TRACKS } from '../lib/tracks';
+import { getPublicTrack, getPublicTracks } from '../lib/track-queries';
 
 const trackParam = Astro.url.searchParams.get('track') ?? undefined;
-const track = isTrackId(trackParam) ? trackParam : undefined;
+const track = (await getPublicTrack(trackParam))?.slug;
 const subjectParam = Astro.url.searchParams.get('subject')?.trim() || undefined;
 
-const [index, subjectNames, tutor] = await Promise.all([getLibraryIndex(), getSubjectNames(track), getTutorProfile()]);
+const [index, subjectNames, tutor, publicTracks] = await Promise.all([getLibraryIndex(), getSubjectNames(track), getTutorProfile(), getPublicTracks()]);
+const info = new Map(publicTracks.map((t) => [t.slug, t]));
 const subject = subjectParam && subjectNames.some((n) => n.toLowerCase() === subjectParam.toLowerCase()) ? subjectParam : undefined;
 const { cards, total } = await getLatestLessons({ track, subject, limit: 9 });
 
@@ -29,7 +30,7 @@ const filterHref = (next: { track?: string; subject?: string }) => {
   const qs = sp.toString();
   return `/${qs ? `?${qs}` : ''}#latest`;
 };
-const filterLabel = [track && TRACKS[track].label, subject].filter(Boolean).join(' · ');
+const filterLabel = [track && info.get(track)?.label, subject].filter(Boolean).join(' · ');
 
 const how: { icon: IconName; title: string; body: string }[] = [
   { icon: 'check', title: t('home.how1Title'), body: t('home.how1Body') },
@@ -69,7 +70,7 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-rev
                 {tracks.map(([id, subjects]) => (
                   <li>
                     <a href={filterHref({ track: id, subject: undefined })} class="chip" aria-current={track === id ? 'true' : undefined}>
-                      {TRACKS[id].label} <span class="chip-count">{trackTotal(subjects)}</span>
+                      {info.get(id)?.label} <span class="chip-count">{trackTotal(subjects)}</span>
                     </a>
                   </li>
                 ))}
@@ -146,7 +147,7 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-rev
               </div>
               {track && (
                 <a href={`/${track}`} class="flex items-center gap-1 text-sm font-semibold text-ink no-underline hover:underline hover:underline-offset-4">
-                  {t('home.browseTrack', { track: TRACKS[track].label })}
+                  {t('home.browseTrack', { track: info.get(track)?.label ?? track })}
                   <Icon name="arrow-right" size={16} />
                 </a>
               )}
@@ -188,9 +189,9 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-rev
                   <div class="flex items-start justify-between gap-3">
                     <div>
                       <h3 id={`track-${id}`} class="text-lg font-bold">
-                        {TRACKS[id].label}
+                        {info.get(id)?.label}
                       </h3>
-                      <p class="text-sm text-ink-3">{TRACKS[id].blurb}</p>
+                      <p class="text-sm text-ink-3">{info.get(id)?.blurb}</p>
                     </div>
                     <span class="chip-static tabular-nums">{tn('home.lessonsOne', 'home.lessons', trackTotal(subjects))}</span>
                   </div>
@@ -206,7 +207,7 @@ Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-rev
                     ))}
                   </ul>
                   <a href={`/${id}`} class="mt-auto flex items-center gap-1 pt-4 text-sm font-semibold text-ink no-underline hover:underline hover:underline-offset-4">
-                    {t('home.openTrack', { track: TRACKS[id].label })}
+                    {t('home.openTrack', { track: info.get(id)?.label ?? id })}
                     <Icon name="arrow-right" size={16} />
                   </a>
                 </section>

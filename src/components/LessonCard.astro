@@ -4,7 +4,6 @@
 import { t } from '../i18n';
 import { fileUrl, formatBytes } from '../lib/files';
 import type { LessonCard } from '../lib/queries';
-import { TRACKS } from '../lib/tracks';
 import { thumbnailUrl } from '../lib/youtube';
 import Icon from './Icon.astro';
 
@@ -52,7 +51,7 @@ const kinds = lesson.kinds.map((k) => t(`fileKinds.${k}`)).join(' · ');
 
   <div class="flex flex-1 flex-col p-4 md:p-5">
     <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
-      <span class="font-semibold text-ink-2">{TRACKS[lesson.track].label}</span>
+      <span class="font-semibold text-ink-2">{lesson.trackLabel}</span>
       <span aria-hidden="true">·</span>
       <span class="truncate">{lesson.chapterName}</span>
     </p>

@@ -5,9 +5,13 @@ import ActionForm from '../../components/admin/ActionForm.astro';
 import Icon from '../../components/Icon.astro';
 import { t } from '../../i18n';
 import { getStructure } from '../../lib/admin-queries';
-import { TRACKS } from '../../lib/tracks';
 
 const handled = [
+  actions.createTrack,
+  actions.updateTrack,
+  actions.moveTrack,
+  actions.archiveTrack,
+  actions.deleteTrack,
   actions.createSubject,
   actions.updateSubject,
   actions.moveSubject,
@@ -40,27 +44,116 @@ const tree = await getStructure();
 <Admin title={t('admin.structure')} current="structure">
   <h1 class="text-2xl font-bold tracking-tight">{t('admin.structure')}</h1>
   <p class="mt-1 max-w-2xl text-ink-2">
-    Tracks are fixed. Inside each, subjects hold chapters and chapters hold lessons, in the order students see them. Archiving hides something from students without deleting anything.
+    Standards hold subjects, subjects hold chapters, and chapters hold lessons, in the order students see them. Archiving hides something from students without deleting anything.
   </p>
 
   {message && <p class="notice notice-success mt-6 max-w-3xl" role="status"><Icon name="check" class="mt-0.5 shrink-0" />{message}</p>}
   {error && <p class="notice notice-error mt-6 max-w-3xl" role="alert"><Icon name="alert" class="mt-0.5 shrink-0" />{error}</p>}
 
-  <div class="mt-10 grid gap-14">
+  <nav aria-label="Jump to a standard" class="mt-6 flex flex-wrap gap-2">
+    {tree.map((group) => (
+      <a href={`#track-${group.track}`} class="chip">
+        {group.label}
+        {group.archived && <span class="text-ink-3">(archived)</span>}
+      </a>
+    ))}
+    <a href="#add-standard" class="chip">
+      <Icon name="plus" size={14} />
+      Add a standard
+    </a>
+  </nav>
+
+  <section id="add-standard" class="mt-10 max-w-3xl rounded-xl border border-line-strong bg-surface p-5" aria-labelledby="add-standard-title">
+    <h2 id="add-standard-title" class="text-lg font-bold">Add a standard</h2>
+    <p class="mt-1 text-sm text-ink-2">A standard is a top-level group such as Class 9 or Engineering. Students see it as a tab in the header once it has a published lesson.</p>
+    <ActionForm action={actions.createTrack} anchor="add-standard" class="mt-4 grid gap-3 sm:grid-cols-2">
+      <div class="field">
+        <label class="label" for="new-track-label">Standard name</label>
+        <input id="new-track-label" name="label" required class="input" placeholder="e.g. Class 9" />
+      </div>
+      <div class="field">
+        <label class="label" for="new-track-slug">Link <span class="font-normal text-ink-3">(optional)</span></label>
+        <input id="new-track-slug" name="slug" class="input" placeholder="made-from-the-name" pattern="[a-z0-9]+(-[a-z0-9]+)*" />
+        <p class="hint">{t('admin.slugHelp')}</p>
+      </div>
+      <div class="field sm:col-span-2">
+        <label class="label" for="new-track-blurb">Description <span class="font-normal text-ink-3">(optional)</span></label>
+        <input id="new-track-blurb" name="blurb" class="input" maxlength="160" placeholder="e.g. Maths and Science" />
+      </div>
+      <button class="btn btn-primary justify-self-start sm:col-span-2">
+        <Icon name="plus" size={16} />
+        Add standard
+      </button>
+    </ActionForm>
+  </section>
+
+  <div class="mt-12 grid gap-14">
     {
-      tree.map(({ track, subjects }) => (
-        <section aria-labelledby={`t-${track}`} id={`track-${track}`}>
-          <div class="flex flex-wrap items-baseline gap-x-3 border-b border-line-strong pb-2">
-            <h2 id={`t-${track}`} class="text-xl font-bold">
-              {TRACKS[track].label}
-            </h2>
-            <p class="text-sm text-ink-3">{TRACKS[track].blurb}</p>
+      tree.map((group, ti) => (
+        <section aria-labelledby={`t-${group.track}`} id={`track-${group.track}`} class:list={['track-section', group.archived && 'is-archived']}>
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-strong pb-2">
+            <div class="mr-auto min-w-0">
+              <h2 id={`t-${group.track}`} class="text-xl font-bold">
+                {group.label}
+                {group.archived && <span class="ml-2 text-sm font-semibold text-ink-3">Archived</span>}
+              </h2>
+              <p class="text-sm text-ink-3">
+                /{group.track}
+                {group.blurb && ` · ${group.blurb}`}
+              </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-1">
+              <ActionForm action={actions.moveTrack} fields={{ current: group.track, direction: 'up' }} anchor={`track-${group.track}`}>
+                <button class="btn btn-quiet btn-sm" disabled={ti === 0} aria-label={`Move ${group.label} up`}>
+                  <Icon name="arrow-up" size={16} />
+                </button>
+              </ActionForm>
+              <ActionForm action={actions.moveTrack} fields={{ current: group.track, direction: 'down' }} anchor={`track-${group.track}`}>
+                <button class="btn btn-quiet btn-sm" disabled={ti === tree.length - 1} aria-label={`Move ${group.label} down`}>
+                  <Icon name="arrow-down" size={16} />
+                </button>
+              </ActionForm>
+              <details class="inline-edit">
+                <summary class="btn btn-quiet btn-sm">Rename</summary>
+                <ActionForm action={actions.updateTrack} fields={{ current: group.track }} anchor={`track-${group.track}`} class="popover-form">
+                  <div class="field">
+                    <label class="label" for={`tn-${group.track}`}>Name</label>
+                    <input id={`tn-${group.track}`} name="label" value={group.label} required class="input" />
+                  </div>
+                  <div class="field">
+                    <label class="label" for={`ts-${group.track}`}>Link</label>
+                    <input id={`ts-${group.track}`} name="slug" value={group.track} readonly={group.slugLocked} class="input read-only:text-ink-3" pattern="[a-z0-9]+(-[a-z0-9]+)*" />
+                    <p class="hint">{group.slugLocked ? 'Locked because lessons in this standard have been published, so shared links keep working.' : t('admin.slugHelp')}</p>
+                  </div>
+                  <div class="field">
+                    <label class="label" for={`tb-${group.track}`}>Description</label>
+                    <input id={`tb-${group.track}`} name="blurb" value={group.blurb} class="input" maxlength="160" />
+                  </div>
+                  <button class="btn btn-primary btn-sm justify-self-start">Save</button>
+                </ActionForm>
+              </details>
+              <ActionForm action={actions.archiveTrack} fields={{ current: group.track, mode: group.archived ? 'restore' : 'archive' }} anchor={`track-${group.track}`}>
+                <button class="btn btn-quiet btn-sm">
+                  <Icon name="archive" size={16} />
+                  {group.archived ? 'Restore' : 'Archive'}
+                </button>
+              </ActionForm>
+              {group.subjects.length === 0 && (
+                <details class="inline-edit">
+                  <summary class="btn btn-quiet btn-sm text-danger">Delete</summary>
+                  <ActionForm action={actions.deleteTrack} fields={{ current: group.track }} anchor="add-standard" class="popover-form">
+                    <p class="text-sm">Delete {group.label}? This can’t be undone.</p>
+                    <button class="btn btn-danger btn-sm justify-self-start">Delete standard</button>
+                  </ActionForm>
+                </details>
+              )}
+            </div>
           </div>
 
-          {subjects.length === 0 && <p class="mt-4 text-sm text-ink-3">No subjects yet.</p>}
+          {group.subjects.length === 0 && <p class="mt-4 text-sm text-ink-3">No subjects yet. Add the first one below.</p>}
 
           <ol class="mt-4 grid gap-4">
-            {subjects.map((subject, si) => (
+            {group.subjects.map((subject, si) => (
               <li id={`subject-${subject.id}`} class:list={['subject rounded-xl border border-line', subject.archived && 'is-archived']}>
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-surface px-4 py-3 md:rounded-t-xl">
                   <div class="mr-auto min-w-0">
@@ -69,7 +162,7 @@ const tree = await getStructure();
                       {subject.archived && <span class="ml-2 text-sm font-semibold text-ink-3">Archived</span>}
                     </h3>
                     <p class="text-sm text-ink-3">
-                      /{track}/{subject.slug} · {subject.lessonCount === 1 ? '1 lesson' : `${subject.lessonCount} lessons`}
+                      /{group.track}/{subject.slug} · {subject.lessonCount === 1 ? '1 lesson' : `${subject.lessonCount} lessons`}
                     </p>
                   </div>
                   <div class="flex flex-wrap items-center gap-1">
@@ -79,7 +172,7 @@ const tree = await getStructure();
                       </button>
                     </ActionForm>
                     <ActionForm action={actions.moveSubject} fields={{ id: subject.id, direction: 'down' }} anchor={`subject-${subject.id}`}>
-                      <button class="btn btn-quiet btn-sm" disabled={si === subjects.length - 1} aria-label={`Move ${subject.name} down`}>
+                      <button class="btn btn-quiet btn-sm" disabled={si === group.subjects.length - 1} aria-label={`Move ${subject.name} down`}>
                         <Icon name="arrow-down" size={16} />
                       </button>
                     </ActionForm>
@@ -212,23 +305,26 @@ const tree = await getStructure();
             ))}
           </ol>
 
-          <details class="mt-4" open={subjects.length === 0}>
-            <summary class="btn btn-sm">
-              <Icon name="plus" size={16} />
-              Add a subject to {TRACKS[track].label}
-            </summary>
-            <ActionForm action={actions.createSubject} fields={{ track }} anchor={`track-${track}`} class="mt-3 grid max-w-xl gap-3 rounded-xl border border-line p-4 sm:grid-cols-2">
+          <section class="add-subject mt-6 rounded-xl border border-dashed border-line-strong p-4" aria-labelledby={`add-subject-${group.track}`}>
+            <h3 id={`add-subject-${group.track}`} class="font-bold">
+              Add a subject to {group.label}
+            </h3>
+            <p class="mt-1 text-sm text-ink-2">A subject groups chapters, such as Maths or Python.</p>
+            <ActionForm action={actions.createSubject} fields={{ track: group.track }} anchor={`track-${group.track}`} class="mt-3 grid max-w-xl gap-3 sm:grid-cols-2">
               <div class="field">
-                <label class="label" for={`ns-${track}`}>Subject name</label>
-                <input id={`ns-${track}`} name="name" required class="input" placeholder="e.g. Maths" />
+                <label class="label" for={`ns-${group.track}`}>Subject name</label>
+                <input id={`ns-${group.track}`} name="name" required class="input" placeholder="e.g. Maths" />
               </div>
               <div class="field">
-                <label class="label" for={`nsl-${track}`}>Link <span class="font-normal text-ink-3">(optional)</span></label>
-                <input id={`nsl-${track}`} name="slug" class="input" placeholder="made-from-the-name" pattern="[a-z0-9]+(-[a-z0-9]+)*" />
+                <label class="label" for={`nsl-${group.track}`}>Link <span class="font-normal text-ink-3">(optional)</span></label>
+                <input id={`nsl-${group.track}`} name="slug" class="input" placeholder="made-from-the-name" pattern="[a-z0-9]+(-[a-z0-9]+)*" />
               </div>
-              <button class="btn btn-primary justify-self-start sm:col-span-2">Add subject</button>
+              <button class="btn btn-primary justify-self-start sm:col-span-2">
+                <Icon name="plus" size={16} />
+                Add subject
+              </button>
             </ActionForm>
-          </details>
+          </section>
         </section>
       ))
     }

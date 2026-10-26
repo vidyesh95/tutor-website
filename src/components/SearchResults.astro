@@ -1,7 +1,7 @@
 ---
 import { t, tn } from '../i18n';
 import { SEARCH_PAGE_SIZE, type SearchHit } from '../lib/queries';
-import { TRACKS, TRACK_IDS, type TrackId } from '../lib/tracks';
+import type { TrackId } from '../lib/tracks';
 import Icon from './Icon.astro';
 
 interface Props {
@@ -11,8 +11,10 @@ interface Props {
   page: number;
   hits: SearchHit[];
   total: number;
+  /** Public tracks, in order, for the filter chips. */
+  tracks: { slug: string; label: string }[];
 }
-const { q, track, subjectId, page, hits, total } = Astro.props;
+const { q, track, subjectId, page, hits, total, tracks } = Astro.props;
 const pages = Math.max(1, Math.ceil(total / SEARCH_PAGE_SIZE));
 const href = (params: { track?: string; page?: number }) => {
   const sp = new URLSearchParams({ q });
@@ -39,10 +41,10 @@ const href = (params: { track?: string; page?: number }) => {
                 {t('search.allTracks')}
               </a>
             </li>
-            {TRACK_IDS.map((id) => (
+            {tracks.map(({ slug, label }) => (
               <li>
-                <a href={href({ track: id })} class="chip" aria-current={track === id ? 'true' : undefined}>
-                  {TRACKS[id].label}
+                <a href={href({ track: slug })} class="chip" aria-current={track === slug ? 'true' : undefined}>
+                  {label}
                 </a>
               </li>
             ))}
@@ -58,10 +60,10 @@ const href = (params: { track?: string; page?: number }) => {
         <h2 class="text-lg font-bold">{t('search.noResultsTitle', { q })}</h2>
         <p class="mt-1 text-ink-2">{t('search.noResultsBody')}</p>
         <ul class="mt-4 flex flex-wrap gap-2">
-          {TRACK_IDS.map((id) => (
+          {tracks.map(({ slug, label }) => (
             <li>
-              <a href={`/${id}`} class="chip">
-                {TRACKS[id].label}
+              <a href={`/${slug}`} class="chip">
+                {label}
               </a>
             </li>
           ))}
@@ -80,7 +82,7 @@ const href = (params: { track?: string; page?: number }) => {
               class="block py-4 text-ink no-underline transition-colors duration-150 hover:bg-surface md:-mx-3 md:px-3"
             >
               <span class="block text-sm text-ink-3">
-                {TRACKS[hit.track].label} · {hit.subjectName} · {hit.chapterName}
+                {hit.trackLabel} · {hit.subjectName} · {hit.chapterName}
               </span>
               <span class="mt-0.5 block text-lg leading-snug font-semibold" set:html={hit.titleHtml} />
               {hit.snippetHtml && <span class="mt-1 line-clamp-2 block text-sm text-ink-2" set:html={hit.snippetHtml} />}

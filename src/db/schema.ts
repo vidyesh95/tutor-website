@@ -1,15 +1,25 @@
 // src/db/schema.ts
 import { sqliteTable, integer, text, index, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-import { TRACK_IDS } from '../lib/tracks';
 
 const now = sql`(CURRENT_TIMESTAMP)`;
+
+/** Standards / tracks (Class 10, Engineering, ...). Admin-managed; `slug` is the URL segment. */
+export const tracks = sqliteTable('tracks', {
+  slug: text('slug').primaryKey(),
+  label: text('label').notNull(),
+  blurb: text('blurb').notNull().default(''),
+  position: integer('position').notNull().default(0),
+  archivedAt: text('archived_at'),
+  createdAt: text('created_at').default(now).notNull(),
+});
 
 export const subjects = sqliteTable(
   'subjects',
   {
     id: integer('id').primaryKey({ autoIncrement: true }),
-    track: text('track', { enum: TRACK_IDS }).notNull(),
+    /** Slug of a row in `tracks`; validated in actions, not a DB foreign key (keeps the migration a plain add). */
+    track: text('track').notNull(),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
     position: integer('position').notNull().default(0),

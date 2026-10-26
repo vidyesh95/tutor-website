@@ -1,8 +1,9 @@
 // Admin reads: see everything, including drafts and archived structure.
 import { and, asc, count, desc, eq, inArray, like, type SQL } from 'drizzle-orm';
-import { chapters, lessonFiles, lessons, subjects } from '../db/schema';
+import { chapters, lessonFiles, lessons, subjects, tracks } from '../db/schema';
 import { getDb } from './db';
-import { TRACK_IDS, type TrackId } from './tracks';
+import { getAllTracks } from './track-queries';
+import type { TrackId } from './tracks';
 
 export type LessonFilters = { track?: TrackId; subjectId?: number; status?: 'draft' | 'published'; q?: string };
 
@@ -24,6 +25,7 @@ export async function listLessons(filters: LessonFilters) {
       videoStatus: lessons.videoStatus,
       updatedAt: lessons.updatedAt,
       track: subjects.track,
+      trackLabel: tracks.label,
       subjectName: subjects.name,
       subjectSlug: subjects.slug,
       subjectArchived: subjects.archivedAt,
@@ -32,6 +34,7 @@ export async function listLessons(filters: LessonFilters) {
     })
     .from(lessons)
     .innerJoin(subjects, eq(subjects.id, lessons.subjectId))
+    .innerJoin(tracks, eq(tracks.slug, subjects.track))
     .innerJoin(chapters, eq(chapters.id, lessons.chapterId))
     .where(where.length ? and(...where) : undefined)
     .orderBy(desc(lessons.updatedAt))
@@ -55,6 +58,11 @@ export async function listLessons(filters: LessonFilters) {
 
 export type StructureTree = {
   track: TrackId;
+  label: string;
+  blurb: string;
+  archived: boolean;
+  /** Published lessons exist under this track, so its link is frozen. */
+  slugLocked: boolean;
   subjects: {
     id: number;
     name: string;
@@ -73,7 +81,8 @@ export type StructureTree = {
 
 export async function getStructure(): Promise<StructureTree> {
   const db = getDb();
-  const [subjectRows, chapterRows, lessonRows] = await Promise.all([
+  const [trackRows, subjectRows, chapterRows, lessonRows] = await Promise.all([
+    getAllTracks(),
     db.select().from(subjects).orderBy(asc(subjects.position), asc(subjects.id)),
     db.select().from(chapters).orderBy(asc(chapters.position), asc(chapters.id)),
     db
@@ -89,11 +98,15 @@ export async function getStructure(): Promise<StructureTree> {
       .orderBy(asc(lessons.position), asc(lessons.id)),
   ]);
 
-  return TRACK_IDS.map((track) => ({
-    track,
-    subjects: subjectRows
-      .filter((s) => s.track === track)
-      .map((s) => {
+  return trackRows.map((track) => {
+    const trackSubjects = subjectRows.filter((s) => s.track === track.slug);
+    return {
+      track: track.slug,
+      label: track.label,
+      blurb: track.blurb,
+      archived: !!track.archivedAt,
+      slugLocked: trackSubjects.some((s) => lessonRows.some((l) => l.subjectId === s.id && l.publishedAt)),
+      subjects: trackSubjects.map((s) => {
         const subjectLessons = lessonRows.filter((l) => l.subjectId === s.id);
         return {
           id: s.id,
@@ -112,11 +125,12 @@ export async function getStructure(): Promise<StructureTree> {
             })),
         };
       }),
-  }));
+    };
+  });
 }
 
 /** Options for the lesson form: every subject (grouped by track) with its chapters. */
 export async function getChapterOptions() {
   const tree = await getStructure();
-  return tree.flatMap(({ track, subjects }) => subjects.map((s) => ({ track, ...s })));
+  return tree.flatMap(({ track, label, subjects }) => subjects.map((s) => ({ track, trackLabel: label, ...s })));
 }

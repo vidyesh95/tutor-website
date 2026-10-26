@@ -5,11 +5,13 @@ import SubjectIndex from '../../components/SubjectIndex.astro';
 import Breadcrumb from '../../components/Breadcrumb.astro';
 import { t } from '../../i18n';
 import { getLibraryIndex } from '../../lib/queries';
-import { isTrackId, TRACKS } from '../../lib/tracks';
+import { getPublicTrack } from '../../lib/track-queries';
+import { trackOgImage } from '../../lib/tracks';
 
 const { track } = Astro.params;
-const valid = isTrackId(track);
-const subjects = valid ? (await getLibraryIndex()).get(track) ?? [] : [];
+const trackRow = await getPublicTrack(track);
+const valid = !!trackRow;
+const subjects = trackRow ? ((await getLibraryIndex()).get(trackRow.slug) ?? []) : [];
 if (!valid) Astro.response.status = 404;
 else Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=600');
 ---
@@ -20,11 +22,11 @@ else Astro.response.headers.set('Cache-Control', 'public, max-age=60, stale-whil
       <NotFound />
     </Base>
   ) : (
-    <Base title={TRACKS[track].label} description={`${TRACKS[track].label}: ${TRACKS[track].blurb}. ${t('site.footer')}`} ogImage={`/og/${track}.png`}>
+    <Base title={trackRow?.label} description={`${trackRow?.label}: ${trackRow?.blurb}. ${t('site.footer')}`} ogImage={trackOgImage(track ?? '')}>
       <div class="wrap pt-6 md:pt-10">
         <Breadcrumb items={[{ label: t('site.name'), href: '/' }]} />
-        <h1 class="mt-3 text-2xl font-bold tracking-tight md:text-3xl">{TRACKS[track].label}</h1>
-        <p class="mt-1 text-ink-2">{TRACKS[track].blurb}</p>
+        <h1 class="mt-3 text-2xl font-bold tracking-tight md:text-3xl">{trackRow?.label}</h1>
+        <p class="mt-1 text-ink-2">{trackRow?.blurb}</p>
         <div class="mt-8 max-w-3xl">
           {subjects.length ? <SubjectIndex subjects={subjects} /> : <p class="border-t border-line pt-6 text-ink-2">{t('track.emptyBody')}</p>}
         </div>

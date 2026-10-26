@@ -10,20 +10,19 @@ import DownloadPanel from './DownloadPanel.astro';
 import { t } from '../i18n';
 import { fileUrl, formatBytes } from '../lib/files';
 import type { Course, LessonDetail } from '../lib/queries';
-import { TRACKS, type TrackId } from '../lib/tracks';
 
 interface Props {
-  track: TrackId;
+  track: string;
+  trackLabel: string;
   subject: { id: number; name: string; slug: string };
   lesson: LessonDetail;
   course: Course | null;
   tutor?: TutorProfile | null;
   preview?: boolean;
 }
-const { track, subject, lesson, course, tutor = null, preview = false } = Astro.props;
+const { track, trackLabel, subject, lesson, course, tutor = null, preview = false } = Astro.props;
 
 const base = `/${track}/${subject.slug}`;
-const trackLabel = TRACKS[track].label;
 const flat = course?.chapters.flatMap((c) => c.lessons.map((l) => ({ ...l, chapter: c }))) ?? [];
 const index = flat.findIndex((l) => l.id === lesson.id);
 const here = index >= 0 ? flat[index] : null;

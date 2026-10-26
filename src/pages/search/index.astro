@@ -5,10 +5,10 @@ import SearchResults from '../../components/SearchResults.astro';
 import { t } from '../../i18n';
 import { getLibraryIndex } from '../../lib/queries';
 import { runSearch } from '../../lib/search-params';
-import { TRACKS } from '../../lib/tracks';
 
 const result = await runSearch(Astro.url);
-const tracks = result.q ? [] : [...(await getLibraryIndex()).entries()].filter(([, s]) => s.length);
+const index = await getLibraryIndex();
+const withLessons = result.q ? [] : result.tracks.filter((t) => ((index.get(t.slug) ?? []).length > 0));
 ---
 
 <Base title={result.q ? t('search.resultsFor', { q: result.q }) : t('search.title')} headerSearch={false} noindex={!!result.q}>
@@ -22,10 +22,10 @@ const tracks = result.q ? [] : [...(await getLibraryIndex()).entries()].filter((
             <h1 class="text-xl font-bold">{t('search.emptyTitle')}</h1>
             <p class="mt-1 text-ink-2">{t('search.emptyBody')}</p>
             <ul class="mt-4 flex flex-wrap gap-2">
-              {tracks.map(([id]) => (
+              {withLessons.map((t) => (
                 <li>
-                  <a href={`/${id}`} class="chip">
-                    {TRACKS[id].label}
+                  <a href={`/${t.slug}`} class="chip">
+                    {t.label}
                   </a>
                 </li>
               ))}

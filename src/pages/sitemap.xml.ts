@@ -1,12 +1,11 @@
 import type { APIRoute } from 'astro';
 import { getSitemapEntries } from '../lib/queries';
-import { TRACK_IDS } from '../lib/tracks';
 
 // Rendered on request from D1 (the build can't see live data), cached briefly.
 export const GET: APIRoute = async ({ url }) => {
   const origin = url.origin;
   const entries = await getSitemapEntries();
-  const tracks = new Set(entries.map((e) => e.track));
+  const tracks = [...new Set(entries.map((e) => e.track))];
   const subjects = new Map<string, string>();
   for (const e of entries) {
     const path = `/${e.track}/${e.subjectSlug}`;
@@ -19,7 +18,7 @@ export const GET: APIRoute = async ({ url }) => {
 
   const urls = [
     loc('/'),
-    ...TRACK_IDS.filter((t) => tracks.has(t)).map((t) => loc(`/${t}`)),
+    ...tracks.map((t) => loc(`/${t}`)),
     ...[...subjects].map(([path, updated]) => loc(path, updated)),
     ...entries.map((e) => loc(`/${e.track}/${e.subjectSlug}/${e.slug}`, e.updatedAt)),
   ];

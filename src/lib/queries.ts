@@ -2,40 +2,48 @@
 // unless a caller explicitly asks for an admin preview.
 import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
-import { chapters, lessonFiles, lessons, subjects, tutorProfile, type FileKind, type LessonFile } from '../db/schema';
+import { chapters, lessonFiles, lessons, subjects, tracks, tutorProfile, type FileKind, type LessonFile } from '../db/schema';
 import { getDb } from './db';
 import { FILE_KINDS } from './files';
 import { toFtsQuery } from './search-index';
-import { TRACK_IDS, type TrackId } from './tracks';
+import { getPublicTracks } from './track-queries';
+import type { TrackId } from './tracks';
 
 export type SubjectSummary = {
   id: number;
   track: TrackId;
+  trackLabel: string;
   name: string;
   slug: string;
   lessonCount: number;
   chapterCount: number;
 };
 
+/** Public subjects grouped by track, tracks in admin order (empty tracks included, so callers filter). */
 export async function getLibraryIndex(): Promise<Map<TrackId, SubjectSummary[]>> {
   const db = getDb();
-  const rows = await db
-    .select({
-      id: subjects.id,
-      track: subjects.track,
-      name: subjects.name,
-      slug: subjects.slug,
-      lessonCount: sql<number>`count(${lessons.id})`,
-      chapterCount: sql<number>`count(distinct ${chapters.id})`,
-    })
-    .from(subjects)
-    .innerJoin(chapters, and(eq(chapters.subjectId, subjects.id), isNull(chapters.archivedAt)))
-    .innerJoin(lessons, and(eq(lessons.chapterId, chapters.id), eq(lessons.status, 'published')))
-    .where(isNull(subjects.archivedAt))
-    .groupBy(subjects.id)
-    .orderBy(asc(subjects.position), asc(subjects.name));
+  const [rows, publicTracks] = await Promise.all([
+    db
+      .select({
+        id: subjects.id,
+        track: subjects.track,
+        trackLabel: tracks.label,
+        name: subjects.name,
+        slug: subjects.slug,
+        lessonCount: sql<number>`count(${lessons.id})`,
+        chapterCount: sql<number>`count(distinct ${chapters.id})`,
+      })
+      .from(subjects)
+      .innerJoin(tracks, and(eq(tracks.slug, subjects.track), isNull(tracks.archivedAt)))
+      .innerJoin(chapters, and(eq(chapters.subjectId, subjects.id), isNull(chapters.archivedAt)))
+      .innerJoin(lessons, and(eq(lessons.chapterId, chapters.id), eq(lessons.status, 'published')))
+      .where(isNull(subjects.archivedAt))
+      .groupBy(subjects.id)
+      .orderBy(asc(subjects.position), asc(subjects.name)),
+    getPublicTracks(),
+  ]);
 
-  const byTrack = new Map<TrackId, SubjectSummary[]>(TRACK_IDS.map((t) => [t, []]));
+  const byTrack = new Map<TrackId, SubjectSummary[]>(publicTracks.map((t) => [t.slug, []]));
   for (const row of rows) byTrack.get(row.track)?.push(row);
   return byTrack;
 }
@@ -55,7 +63,7 @@ export type CourseLesson = {
 export type CourseChapter = { id: number; name: string; number: number; lessons: CourseLesson[] };
 
 export type Course = {
-  subject: { id: number; track: TrackId; name: string; slug: string };
+  subject: { id: number; track: TrackId; trackLabel: string; name: string; slug: string };
   chapters: CourseChapter[];
   lessonCount: number;
   fileCount: number;
@@ -65,8 +73,9 @@ export type Course = {
 export async function getCourse(track: TrackId, subjectSlug: string): Promise<Course | null> {
   const db = getDb();
   const [subject] = await db
-    .select({ id: subjects.id, track: subjects.track, name: subjects.name, slug: subjects.slug })
+    .select({ id: subjects.id, track: subjects.track, trackLabel: tracks.label, name: subjects.name, slug: subjects.slug })
     .from(subjects)
+    .innerJoin(tracks, and(eq(tracks.slug, subjects.track), isNull(tracks.archivedAt)))
     .where(and(eq(subjects.track, track), eq(subjects.slug, subjectSlug), isNull(subjects.archivedAt)));
   if (!subject) return null;
 
@@ -195,6 +204,7 @@ export async function getLessonDetail(where: { subjectId: number; slug: string }
 export type SearchHit = {
   id: number;
   track: TrackId;
+  trackLabel: string;
   subjectSlug: string;
   subjectName: string;
   chapterName: string;
@@ -233,13 +243,14 @@ export async function searchLessons(q: string, opts: { track?: TrackId; subjectI
     JOIN lessons l ON l.id = lessons_fts.rowid
     JOIN subjects s ON s.id = l.subject_id
     JOIN chapters c ON c.id = l.chapter_id
+    JOIN tracks tr ON tr.slug = s.track AND tr.archived_at IS NULL
     WHERE lessons_fts MATCH ?1 ${trackClause}`;
 
   let list: D1Result, count: D1Result;
   try {
     [list, count] = await env.DB.batch([
     env.DB.prepare(
-      `SELECT l.id, l.slug, s.track, s.slug AS subjectSlug, s.name AS subjectName, c.name AS chapterName,
+      `SELECT l.id, l.slug, s.track, tr.label AS trackLabel, s.slug AS subjectSlug, s.name AS subjectName, c.name AS chapterName,
          (l.youtube_id IS NOT NULL AND l.video_status != 'unavailable') AS hasVideo,
          (SELECT count(*) FROM lesson_files f WHERE f.lesson_id = l.id) AS fileCount,
          highlight(lessons_fts, 0, char(1), char(2)) AS titleHl,
@@ -264,6 +275,7 @@ export async function searchLessons(q: string, opts: { track?: TrackId; subjectI
   const hits = (list.results as Row[]).map((r) => ({
     id: r.id,
     track: r.track,
+    trackLabel: r.trackLabel,
     subjectSlug: r.subjectSlug,
     subjectName: r.subjectName,
     chapterName: r.chapterName,
@@ -282,8 +294,9 @@ export async function getSitemapEntries() {
      FROM lessons l
      JOIN subjects s ON s.id = l.subject_id
      JOIN chapters c ON c.id = l.chapter_id
+     JOIN tracks tr ON tr.slug = s.track AND tr.archived_at IS NULL
      WHERE l.status = 'published' AND s.archived_at IS NULL AND c.archived_at IS NULL
-     ORDER BY s.track, s.position, c.position, l.position`,
+     ORDER BY tr.position, s.track, s.position, c.position, l.position`,
   ).all<{ track: TrackId; subjectSlug: string; slug: string; updatedAt: string }>();
   return results;
 }
@@ -291,6 +304,7 @@ export async function getSitemapEntries() {
 export type LessonCard = {
   id: number;
   track: TrackId;
+  trackLabel: string;
   subjectName: string;
   subjectSlug: string;
   chapterName: string;
@@ -315,19 +329,19 @@ export async function getLatestLessons(opts: { track?: TrackId; subject?: string
     where.push(`s.name = ?${binds.length} COLLATE NOCASE`);
   }
   const clause = where.join(' AND ');
+  const from = `FROM lessons l JOIN subjects s ON s.id = l.subject_id JOIN chapters c ON c.id = l.chapter_id
+       JOIN tracks tr ON tr.slug = s.track AND tr.archived_at IS NULL`;
   const limit = opts.limit ?? 9;
   const [list, count] = await env.DB.batch([
     env.DB.prepare(
-      `SELECT l.id, s.track, s.name AS subjectName, s.slug AS subjectSlug, c.name AS chapterName, l.title, l.slug,
+      `SELECT l.id, s.track, tr.label AS trackLabel, s.name AS subjectName, s.slug AS subjectSlug, c.name AS chapterName, l.title, l.slug,
          l.description, CASE WHEN l.video_status = 'unavailable' THEN NULL ELSE l.youtube_id END AS youtubeId
-       FROM lessons l JOIN subjects s ON s.id = l.subject_id JOIN chapters c ON c.id = l.chapter_id
+       ${from}
        WHERE ${clause}
        ORDER BY l.published_at DESC, l.id DESC
        LIMIT ${limit}`,
     ).bind(...binds),
-    env.DB.prepare(
-      `SELECT count(*) AS total FROM lessons l JOIN subjects s ON s.id = l.subject_id JOIN chapters c ON c.id = l.chapter_id WHERE ${clause}`,
-    ).bind(...binds),
+    env.DB.prepare(`SELECT count(*) AS total ${from} WHERE ${clause}`).bind(...binds),
   ]);
   const rows = list.results as Omit<LessonCard, 'primaryFile' | 'kinds'>[];
   const files = rows.length
@@ -354,6 +368,7 @@ export async function getLatestLessons(opts: { track?: TrackId; subject?: string
 export async function getSubjectNames(track?: TrackId) {
   const { results } = await env.DB.prepare(
     `SELECT s.name, count(*) AS n FROM lessons l JOIN subjects s ON s.id = l.subject_id JOIN chapters c ON c.id = l.chapter_id
+     JOIN tracks tr ON tr.slug = s.track AND tr.archived_at IS NULL
      WHERE l.status = 'published' AND s.archived_at IS NULL AND c.archived_at IS NULL ${track ? 'AND s.track = ?1' : ''}
      GROUP BY s.name COLLATE NOCASE ORDER BY n DESC, s.name`,
   )

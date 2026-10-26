@@ -6,7 +6,7 @@ import { t } from '../i18n';
 import Icon from '../components/Icon.astro';
 import ThemeToggle from '../components/ThemeToggle.astro';
 import { getTutorProfile } from '../lib/queries';
-import { TRACKS, TRACK_IDS } from '../lib/tracks';
+import { getPublicTracks } from '../lib/track-queries';
 
 interface Props {
   title?: string;
@@ -31,9 +31,9 @@ const {
   preconnectYouTube = false,
   current,
 } = Astro.props;
-const tutor = await getTutorProfile();
+const [tutor, publicTracks] = await Promise.all([getTutorProfile(), getPublicTracks()]);
 const nav = [
-  ...TRACK_IDS.map((id) => ({ id, label: TRACKS[id].label, href: `/${id}` })),
+  ...publicTracks.map((t) => ({ id: t.slug, label: t.label, href: `/${t.slug}` })),
   ...(tutor ? [{ id: 'about', label: t('about.nav'), href: '/about' }] : []),
 ];
 
@@ -176,7 +176,7 @@ const beaconToken = (env as unknown as Record<string, string | undefined>).CF_BE
         <nav aria-label="Tracks footer">
           <h2 class="eyebrow">{t('site.footerTracks')}</h2>
           <ul class="mt-3 grid gap-2 text-sm">
-            {TRACK_IDS.map((id) => <li><a href={`/${id}`} class="footer-link">{TRACKS[id].label}</a></li>)}
+            {publicTracks.map((t) => <li><a href={`/${t.slug}`} class="footer-link">{t.label}</a></li>)}
           </ul>
         </nav>
         <nav aria-label="Library">

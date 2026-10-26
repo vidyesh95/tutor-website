@@ -4,7 +4,6 @@ import NotFound from '../components/NotFound.astro';
 import Icon from '../components/Icon.astro';
 import { t, tn } from '../i18n';
 import { getLibraryIndex, getTutorProfile } from '../lib/queries';
-import { TRACKS } from '../lib/tracks';
 
 const [tutor, index] = await Promise.all([getTutorProfile(), getLibraryIndex()]);
 if (!tutor) Astro.response.status = 404;
@@ -53,7 +52,7 @@ const photo = tutor?.photoKey ? `/${tutor.photoKey}` : null;
                   <li>
                     <a href={`/${track}/${s.slug}`} class="panel group flex items-center gap-3 p-4 text-ink no-underline hover:border-line-strong">
                       <span class="min-w-0 flex-1">
-                        <span class="block text-xs font-semibold text-ink-3">{TRACKS[track].label}</span>
+                        <span class="block text-xs font-semibold text-ink-3">{s.trackLabel}</span>
                         <span class="block font-bold">{s.name}</span>
                       </span>
                       <span class="text-sm text-ink-3 tabular-nums">{tn('home.lessonsOne', 'home.lessons', s.lessonCount)}</span>

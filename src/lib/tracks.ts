@@ -1,15 +1,17 @@
-// Tracks are fixed in code; subjects and chapters are managed in admin.
-export const TRACK_IDS = ['class-10', 'class-11', 'class-12', 'engineering', 'pro'] as const;
-export type TrackId = (typeof TRACK_IDS)[number];
+// Standards (tracks: Class 10, Engineering, ...) live in the `tracks` table and are managed in admin.
+// Reads go through track-queries.ts; this file only holds the pure rules shared by those reads and the admin actions.
 
-export const TRACKS: Record<TrackId, { label: string; blurb: string }> = {
-  'class-10': { label: 'Class 10', blurb: 'Maths and Computer Science' },
-  'class-11': { label: 'Class 11', blurb: 'Maths and Computer Science' },
-  'class-12': { label: 'Class 12', blurb: 'Maths and Computer Science' },
-  engineering: { label: 'Engineering', blurb: 'C, C++, Java and Python' },
-  pro: { label: 'Professionals', blurb: 'AI, cloud and backend engineering' },
-};
+/** A track's URL segment, e.g. "class-10". Validated against the `tracks` table, not a fixed list. */
+export type TrackId = string;
 
-export function isTrackId(value: string | undefined): value is TrackId {
-  return !!value && (TRACK_IDS as readonly string[]).includes(value);
+/** Tracks that ship with built-in OG art. Any other track gets the default card. */
+const TRACKS_WITH_OG_ART = new Set(['class-10', 'class-11', 'class-12', 'engineering', 'pro']);
+
+export const trackOgImage = (slug: string) => (TRACKS_WITH_OG_ART.has(slug) ? `/og/${slug}.png` : '/og/default.png');
+
+/** Top-level paths the app already owns. A track can't take one of these as its link. */
+export const RESERVED_TRACK_SLUGS = new Set(['admin', 'search', 'about', 'files', 'media', 'og', 'api', '_astro', '404', 'sitemap.xml', 'robots.txt', 'favicon.svg']);
+
+export function isReservedTrackSlug(slug: string) {
+  return RESERVED_TRACK_SLUGS.has(slug);
 }

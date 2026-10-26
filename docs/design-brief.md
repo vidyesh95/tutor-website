@@ -54,8 +54,8 @@ Production-ready, full surface (public + admin), wired to D1/R2, polish until sh
 Pre-launch: local D1 has 0 lessons, remote D1 has no tables. Delete `drizzle/0000_*`, generate a fresh initial migration from the new schema. No data mapping needed.
 
 ### Schema
-- Tracks: code enum `class-10 | class-11 | class-12 | engineering | pro`.
-- `subjects`: id, track, name, slug, order, archived_at.
+- `tracks` (admin-managed standards, added 2026-10-26): slug (PK, URL segment, frozen once a lesson under it is published), label, blurb, position, archived_at. Seeded with `class-10 | class-11 | class-12 | engineering | pro`. Admin can add, rename, reorder, archive, and delete (empty only) standards at `/admin/structure`. Reserved slugs (`admin`, `search`, `about`, `files`, `media`, `og`, `api`, ...) are rejected.
+- `subjects`: id, track (slug of a `tracks` row, checked in actions, not a DB foreign key), name, slug, order, archived_at.
 - `chapters`: id, subject_id, name, position, archived_at. (No slug: chapters never appear in URLs.)
 - `lessons`: id, subject_id (denormalized so slugs are unique per subject, the URL scope), chapter_id, title, slug, position, youtube_id (nullable), video_status (`ok | unavailable | unchecked`), description, status (`draft | published`), published_at, created_at, updated_at.
 - `lesson_files`: id, lesson_id, r2_key, kind (`notes | worksheet | solutions`), order, size_bytes, original_name, sha256.
@@ -107,7 +107,7 @@ D1 Time Travel covers point-in-time restore (built-in). Plus weekly GitHub Actio
 - **Forms:** Astro Actions, work without JS; JS adds upload progress, live validation, size checks.
 
 ## 9. Content
-- Track labels: Class 10, Class 11, Class 12, Engineering, Professionals. File kinds: Notes, Practice, Solutions.
+- Track labels come from the `tracks` table and are editable in admin. Seeded: Class 10, Class 11, Class 12, Engineering, Professionals. File kinds: Notes, Practice, Solutions.
 - Voice: encouraging, plain. "Up next", "Pick up where you left off", "Marked done". No urgency, no em dashes.
 - Microcopy centralized in `src/i18n/en.json` (English only; Hindi later is a swap).
 - Ranges: 5 tracks; 2–8 subjects/track; 5–20 chapters/subject; 3–15 lessons/chapter; hundreds total; titles ≤ ~80 chars; PDFs 0.2–25 MB.
@@ -141,3 +141,7 @@ Requested from reference screenshots; amber identity kept, structure adopted.
 
 ## 14. Open (resolve during build)
 - None blocking. Later: add WAF rate-limit rule in front of the D1 counter if the site moves to a custom domain zone on a plan that offers the window.
+
+## 15. Standards are data (2026-10-26)
+- Tracks moved from the fixed code list (`src/lib/tracks.ts`) to the `tracks` table so admins can add standards such as Class 9 without a deploy. Public nav, footer, home, search chips, course/lesson labels, and sitemap read from the table. Archived standards disappear everywhere public (queries join `tracks` where `archived_at` is null) and resolve to the friendly 404.
+- `/admin/structure` leads with an "Add a standard" panel and shows an always-visible "Add a subject" form under each standard, so creation no longer hides in collapsed disclosures.

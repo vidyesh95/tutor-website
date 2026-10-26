@@ -6,13 +6,15 @@ import LessonView from '../../../../components/LessonView.astro';
 import { subjects } from '../../../../db/schema';
 import { getDb } from '../../../../lib/db';
 import { getCourse, getLessonDetail } from '../../../../lib/queries';
+import { getAllTracks } from '../../../../lib/track-queries';
 
 const found = await getLessonDetail({ id: Number(Astro.params.id) });
 if (!found) return Astro.rewrite('/404');
 const [subject] = await getDb().select().from(subjects).where(eq(subjects.id, found.subjectId));
 const course = await getCourse(subject.track, subject.slug);
+const trackLabel = (await getAllTracks()).find((t) => t.slug === subject.track)?.label ?? subject.track;
 ---
 
 <Base title={`Preview: ${found.detail.title}`} noindex preconnectYouTube={!!found.detail.youtubeId}>
-  <LessonView track={subject.track} subject={subject} lesson={found.detail} course={course} preview />
+  <LessonView track={subject.track} trackLabel={trackLabel} subject={subject} lesson={found.detail} course={course} preview />
 </Base>
